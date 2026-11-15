@@ -1,0 +1,8 @@
+__pycache__/
+*.py[cod]
+.venv/
+node_modules/
+.arena/
+.test-configs/
+playwright-report/
+test-results/

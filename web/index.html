@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#101014"><title>Phantom / Control room</title><link rel="icon" href="/favicon.svg"><link rel="stylesheet" href="/style.css"><script src="/app.js" defer></script></head>
+<body>
+<aside class="sidebar">
+<a class="brand" href="/" aria-label="Phantom home"><span class="brand-icon">P<span>·</span></span>phantom<span class="brand-dot">®</span></a>
+<div class="workspace"><span class="game-icon">CS<span>2</span></span><div>Counter-Strike 2<small>Local workspace <span>⌄</span></small></div></div>
+<p class="nav-label">WORKSPACE</p>
+<nav id="nav" aria-label="Workspace"></nav>
+<div class="sidebar-bottom"><div class="companion-led"><i id="connection-led"></i><span>Local companion<small id="connection-label">Connecting…</small></span><span class="tiny-arrow">↗</span></div><div class="profile"><div class="avatar">P</div><div>Personal workspace<small>Local session</small></div><span class="version">v0.1</span></div></div>
+</aside>
+<div class="app-shell">
+<header class="topbar"><div class="breadcrumb">Workspace <span>/</span> <strong id="breadcrumb">Overview</strong></div><div class="top-right"><span class="session-badge"><i></i> LOCAL SESSION</span><span class="top-divider"></span><button class="icon-button" id="help" aria-label="About this build">?</button><span class="avatar small-avatar">P</span></div></header>
+<main>
+<div class="page-heading"><div><div class="eyebrow">YOUR GAME. YOUR WORKSPACE.</div><h1 id="page-title">Control room<span>.</span></h1><p id="page-subtitle">Everything in view. Every setting in its place.</p></div><button class="button secondary" id="reset"><span>↺</span> Reset settings</button></div>
+<div class="notice"><span class="notice-icon">◇</span><div><strong>Preview workspace</strong><span id="preview-description">Visuals use synthetic data. No connection to the game.</span></div><span class="pill">NO INJECTION</span></div>
+<section class="stats" aria-label="Connection information"><article><span class="stat-icon">⌘</span><div><label>COMPANION</label><strong id="stat-companion">Connecting</strong></div><span class="stat-end" id="stat-platform">—</span></article><article><span class="stat-icon">◎</span><div><label>GAME PROCESS</label><strong id="stat-process">Not connected</strong></div><span class="stat-end">CS2</span></article><article><span class="stat-icon">▱</span><div><label>ACTIVE CONFIG</label><strong id="stat-config">Unsaved workspace</strong></div><span class="stat-end purple" id="saved-count">0 saved</span></article></section>
+<div id="content"></div>
+<footer><span><i></i> Phantom companion <span class="footer-separator">/</span> Development build</span><span>Local-first. No cloud. <span class="footer-mark">P.</span></span></footer>
+</main></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<dialog id="about"><div class="dialog-heading"><h2>A clear boundary.</h2><button class="icon-button" id="close-about" aria-label="Close">×</button></div><p>This build provides a browser settings workspace, on-disk named configs, and Windows process detection using Tool Help APIs.</p><p>The canvas contains synthetic actors, not CS2 data. Gameplay controls store preferences only. Injection, memory access, overlays inside CS2, aiming, and game modifications are not implemented.</p><button class="button primary" id="understood">Understood</button></dialog>
+</body></html>
