@@ -30,7 +30,7 @@ int32_t PHANTOM_CALL phantom_get_integration_status(PhantomIntegrationStatus* ou
     *out = {};
     out->struct_size = sizeof(*out);
     out->abi_version = abi;
-    constexpr char reason[] = "Foundation only: CS2 adapter, game hooks, bomb reads and cosmetic refresh are not implemented.";
+    constexpr char reason[] = "Experimental bomb adapter is present but not live-validated; cosmetic refresh is not implemented.";
     static_assert(sizeof(reason) <= sizeof(out->reason));
     std::memcpy(out->reason, reason, sizeof(reason));
     return PHANTOM_OK;

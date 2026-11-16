@@ -20,8 +20,9 @@ struct PhantomStatusLayout {
 std::wstring utf8_to_wide(const char* value) {
     int chars = MultiByteToWideChar(CP_UTF8, 0, value, -1, nullptr, 0);
     if (chars <= 1) return {};
-    std::wstring result((size_t)chars - 1, L'\0');
+    std::wstring result(static_cast<size_t>(chars), L'\0');
     MultiByteToWideChar(CP_UTF8, 0, value, -1, result.data(), chars);
+    result.pop_back();
     return result;
 }
 
