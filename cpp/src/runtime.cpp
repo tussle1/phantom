@@ -22,6 +22,9 @@ void clear_timing(PhantomBombTiming* out) {
 #ifndef UNICODE
 #define UNICODE
 #endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
 #include <windows.h>
 
 namespace {
