@@ -1,0 +1,28 @@
+name: Record Windows startup
+on:
+  push:
+    paths:
+      - 'tools/record_windows_startup.py'
+      - '.github/workflows/startup-video.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  record:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          architecture: x64
+      - name: Install recording dependencies
+        run: python -m pip install -r requirements-gui.txt Pillow==11.2.1 imageio-ffmpeg==0.6.0
+      - name: Capture real application startup
+        run: python tools/record_windows_startup.py artifacts/startup-cmd.mp4
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phantom-cmd-startup
+          path: artifacts/startup-cmd.mp4
+          if-no-files-found: error
+          retention-days: 14
