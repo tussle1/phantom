@@ -181,7 +181,8 @@ def record(output):
                 encoder.kill()
                 encoder.wait()
             subprocess.run(['taskkill', '/PID', str(process.pid), '/T', '/F'],
-                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+                           stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                           stderr=subprocess.DEVNULL, check=False)
             process.wait(timeout=10)
     print(f'Recorded {output}: actual Windows console text redrawn, 12 seconds, no game worker.')
 
