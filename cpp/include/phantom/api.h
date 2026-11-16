@@ -89,6 +89,10 @@ PHANTOM_API int32_t PHANTOM_CALL phantom_set_cosmetic_custom_name(uint32_t weapo
 PHANTOM_API int32_t PHANTOM_CALL phantom_get_cosmetic_custom_name(uint32_t weapon_definition, char* out, uint32_t out_capacity);
 PHANTOM_API int32_t PHANTOM_CALL phantom_set_cosmetic_mesh_group(uint32_t weapon_definition, uint64_t mesh_group_mask);
 PHANTOM_API int32_t PHANTOM_CALL phantom_get_cosmetic_mesh_group(uint32_t weapon_definition, uint64_t* out_mask);
+/* Optional local knife override: 0 disables knife override; otherwise must be one
+   of the 20 custom CS2 knife item definition IDs (500..526). */
+PHANTOM_API int32_t PHANTOM_CALL phantom_set_knife_override(uint32_t knife_definition);
+PHANTOM_API int32_t PHANTOM_CALL phantom_get_knife_override(uint32_t* out_knife_definition);
 PHANTOM_API int32_t PHANTOM_CALL phantom_clear_cosmetic_preferences(void);
 /* Applies/restores local cosmetic preferences when loaded in-process with client.dll.
    Returns PHANTOM_NOT_INTEGRATED outside CS2. Local-only: never alters inventory ownership. */

@@ -7,6 +7,7 @@
 #include <cstring>
 #include <limits>
 #include <set>
+#include <tuple>
 
 namespace phantom {
 namespace {
@@ -16,7 +17,38 @@ constexpr std::size_t max_loadout_bytes = 65536;
 constexpr std::size_t max_weapons_vector = 64;
 constexpr std::size_t max_custom_name_len = 32;
 constexpr std::uint32_t fallback_item_id_high = 0xffffffffu;
+constexpr std::int32_t knife_unusual_quality = 3;
 constexpr std::int32_t stattrak_quality = 9;
+constexpr std::uint32_t murmur2_seed = 0x31415926u;
+constexpr std::uint32_t murmur2_m = 0x5bd1e995u;
+
+struct KnifeCatalogEntry {
+    std::uint32_t definition;
+    const char* model_path;
+};
+
+constexpr KnifeCatalogEntry kCustomKnives[] = {
+    {500, "weapons/models/knife/knife_bayonet/weapon_knife_bayonet.vmdl"},
+    {503, "weapons/models/knife/knife_css/weapon_knife_css.vmdl"},
+    {505, "weapons/models/knife/knife_flip/weapon_knife_flip.vmdl"},
+    {506, "weapons/models/knife/knife_gut/weapon_knife_gut.vmdl"},
+    {507, "weapons/models/knife/knife_karambit/weapon_knife_karambit.vmdl"},
+    {508, "weapons/models/knife/knife_m9/weapon_knife_m9.vmdl"},
+    {509, "weapons/models/knife/knife_tactical/weapon_knife_tactical.vmdl"},
+    {512, "weapons/models/knife/knife_falchion/weapon_knife_falchion.vmdl"},
+    {514, "weapons/models/knife/knife_bowie/weapon_knife_bowie.vmdl"},
+    {515, "weapons/models/knife/knife_butterfly/weapon_knife_butterfly.vmdl"},
+    {516, "weapons/models/knife/knife_push/weapon_knife_push.vmdl"},
+    {517, "weapons/models/knife/knife_cord/weapon_knife_cord.vmdl"},
+    {518, "weapons/models/knife/knife_canis/weapon_knife_canis.vmdl"},
+    {519, "weapons/models/knife/knife_ursus/weapon_knife_ursus.vmdl"},
+    {520, "weapons/models/knife/knife_gypsy_jackknife/weapon_knife_gypsy_jackknife.vmdl"},
+    {521, "weapons/models/knife/knife_outdoor/weapon_knife_outdoor.vmdl"},
+    {522, "weapons/models/knife/knife_stiletto/weapon_knife_stiletto.vmdl"},
+    {523, "weapons/models/knife/knife_widowmaker/weapon_knife_widowmaker.vmdl"},
+    {525, "weapons/models/knife/knife_skeleton/weapon_knife_skeleton.vmdl"},
+    {526, "weapons/models/knife/knife_kukri/weapon_knife_kukri.vmdl"},
+};
 
 bool valid_values(const CosmeticValues& value) {
     return value.paint_kit <= 0x7fffffffu && value.seed <= 1000 &&
@@ -28,10 +60,19 @@ bool values_equal(const CosmeticValues& a, const CosmeticValues& b) {
            a.stattrak == b.stattrak && std::fabs(a.wear - b.wear) <= 1e-6f;
 }
 bool extras_equal(const CosmeticExtras& a, const CosmeticExtras& b) {
-    return a.custom_name == b.custom_name && a.mesh_group_mask == b.mesh_group_mask;
+    return a.custom_name == b.custom_name && a.mesh_group_mask == b.mesh_group_mask &&
+           a.target_definition == b.target_definition;
 }
 bool matching(const CosmeticItem& item, std::uint64_t identity, std::uint32_t definition) {
     return item.identity == identity && item.owned_local && item.weapon_definition == definition;
+}
+bool matching_knife_swap(const CosmeticItem& item, std::uint64_t identity,
+                         std::uint32_t expected_def, std::uint32_t target_def) {
+    if (item.identity != identity || !item.owned_local) return false;
+    if (target_def != 0) {
+        return is_knife_definition(item.weapon_definition) && is_custom_knife_definition(target_def);
+    }
+    return item.weapon_definition == expected_def;
 }
 
 template<class T>
@@ -260,13 +301,71 @@ bool valid_mesh_group(std::uint64_t mask) {
     return mask == 0 || mask == 1 || mask == 2;
 }
 
+bool is_custom_knife_definition(std::uint32_t definition) {
+    for (const KnifeCatalogEntry& entry : kCustomKnives) {
+        if (entry.definition == definition) return true;
+    }
+    return false;
+}
+
+bool is_knife_definition(std::uint32_t definition) {
+    return definition == 42u || definition == 59u || is_custom_knife_definition(definition);
+}
+
+const char* knife_model_path(std::uint32_t definition) {
+    if (definition == 42u) return "weapons/models/knife/knife_default_ct/weapon_knife_default_ct.vmdl";
+    if (definition == 59u) return "weapons/models/knife/knife_default_t/weapon_knife_default_t.vmdl";
+    for (const KnifeCatalogEntry& entry : kCustomKnives) {
+        if (entry.definition == definition) return entry.model_path;
+    }
+    return nullptr;
+}
+
+std::uint32_t utl_string_token(const char* text) {
+    if (!text) return 0;
+    const std::size_t len = std::strlen(text);
+    std::uint32_t h = murmur2_seed ^ static_cast<std::uint32_t>(len);
+    const auto* data = reinterpret_cast<const unsigned char*>(text);
+    std::size_t i = 0;
+    while (i + 4 <= len) {
+        std::uint32_t k = static_cast<std::uint32_t>(data[i]) |
+                          (static_cast<std::uint32_t>(data[i + 1]) << 8) |
+                          (static_cast<std::uint32_t>(data[i + 2]) << 16) |
+                          (static_cast<std::uint32_t>(data[i + 3]) << 24);
+        k *= murmur2_m;
+        k ^= k >> 24;
+        k *= murmur2_m;
+        h *= murmur2_m;
+        h ^= k;
+        i += 4;
+    }
+    switch (len - i) {
+        case 3: h ^= static_cast<std::uint32_t>(data[i + 2]) << 16; [[fallthrough]];
+        case 2: h ^= static_cast<std::uint32_t>(data[i + 1]) << 8; [[fallthrough]];
+        case 1: h ^= static_cast<std::uint32_t>(data[i]); h *= murmur2_m; break;
+        default: break;
+    }
+    h ^= h >> 13;
+    h *= murmur2_m;
+    h ^= h >> 15;
+    return h;
+}
+
 bool parse_skin_loadout_json(const std::string& text, bool& enabled_out,
                              std::vector<CosmeticPreferenceEntry>& entries_out) {
+    std::uint32_t ignored_knife = 0;
+    return parse_skin_loadout_json(text, enabled_out, entries_out, ignored_knife);
+}
+
+bool parse_skin_loadout_json(const std::string& text, bool& enabled_out,
+                             std::vector<CosmeticPreferenceEntry>& entries_out,
+                             std::uint32_t& knife_override_out) {
     if (text.empty() || text.size() > max_loadout_bytes) return false;
     JsonCursor cursor(text);
     if (!cursor.consume('{')) return false;
-    bool has_version = false, has_enabled = false, has_entries = false;
+    bool has_version = false, has_enabled = false, has_entries = false, has_knife = false;
     bool parsed_enabled = false;
+    std::uint32_t parsed_knife = 0;
     std::vector<CosmeticPreferenceEntry> parsed_entries;
     std::set<std::uint32_t> seen_weapons;
 
@@ -281,6 +380,14 @@ bool parse_skin_loadout_json(const std::string& text, bool& enabled_out,
         } else if (key == "enabled") {
             if (has_enabled || !cursor.parse_bool(parsed_enabled)) return false;
             has_enabled = true;
+        } else if (key == "knife_override") {
+            std::int64_t knife_val = 0;
+            if (has_knife || !cursor.parse_int64(knife_val) || knife_val < 0 || knife_val > 65535)
+                return false;
+            const auto candidate = static_cast<std::uint32_t>(knife_val);
+            if (candidate != 0 && !is_custom_knife_definition(candidate)) return false;
+            parsed_knife = candidate;
+            has_knife = true;
         } else if (key == "entries") {
             if (has_entries || !cursor.consume('[')) return false;
             if (!cursor.consume(']')) {
@@ -304,13 +411,16 @@ bool parse_skin_loadout_json(const std::string& text, bool& enabled_out,
     if (!has_version || !has_enabled || !has_entries || !cursor.eof()) return false;
     enabled_out = parsed_enabled;
     entries_out = std::move(parsed_entries);
+    knife_override_out = parsed_knife;
     return true;
 }
 
 MemoryCosmeticAdapter::MemoryCosmeticAdapter(IProcessMemory& memory, std::uintptr_t client_base,
-                                             const Profile& profile, MaterialRefreshFn material_refresh)
+                                             const Profile& profile, MaterialRefreshFn material_refresh,
+                                             KnifeModelRefreshFn knife_model_refresh)
     : memory_(memory), base_(client_base), profile_(profile),
-      material_refresh_(std::move(material_refresh)) {}
+      material_refresh_(std::move(material_refresh)),
+      knife_model_refresh_(std::move(knife_model_refresh)) {}
 
 std::uintptr_t MemoryCosmeticAdapter::resolve_entity(std::uintptr_t root, std::uint32_t index,
                                                      std::uint32_t stride) const {
@@ -487,6 +597,10 @@ bool MemoryCosmeticAdapter::read(std::uint64_t identity, CosmeticItem& item) {
 
     if (owned && originals_.find(identity) == originals_.end() && originals_.size() < 64) {
         OriginalMeta meta{};
+        meta.item_definition_index = def_index;
+        if (profile_.skins.subclass_id != 0) {
+            meta.has_subclass_id = read_scalar(memory_, weapon + profile_.skins.subclass_id, meta.subclass_id);
+        }
         meta.raw_paint_kit = raw_kit;
         meta.raw_seed = raw_seed;
         meta.raw_wear = raw_wear;
@@ -535,6 +649,20 @@ bool MemoryCosmeticAdapter::write(std::uint64_t identity, const CosmeticValues& 
     const auto orig_it = originals_.find(identity);
 
     if (override_mode) {
+        const std::uint32_t target_def =
+            mode_it != pending_.end() ? mode_it->second.extras.target_definition : 0u;
+        if (target_def != 0) {
+            if (!is_custom_knife_definition(target_def)) return false;
+            const auto new_def = static_cast<std::uint16_t>(target_def);
+            if (!write_scalar(memory_, item_view + profile_.skins.item_definition_index, new_def))
+                return false;
+            if (profile_.skins.subclass_id != 0) {
+                const std::string def_str = std::to_string(target_def);
+                const std::uint32_t token = utl_string_token(def_str.c_str());
+                if (!write_scalar(memory_, weapon + profile_.skins.subclass_id, token))
+                    return false;
+            }
+        }
         const std::int32_t kit = static_cast<std::int32_t>(values.paint_kit);
         const std::int32_t seed = static_cast<std::int32_t>(values.seed);
         if (!write_scalar(memory_, weapon + profile_.skins.fallback_paint_kit, kit)) return false;
@@ -550,7 +678,11 @@ bool MemoryCosmeticAdapter::write(std::uint64_t identity, const CosmeticValues& 
         if (account_id != 0) {
             if (!write_scalar(memory_, item_view + profile_.skins.account_id, account_id)) return false;
         }
-        if (values.stattrak >= 0) {
+        if (target_def != 0) {
+            // CS2 knives display the ★ star prefix via entity quality 3 (even when StatTrak is enabled).
+            if (!write_scalar(memory_, item_view + profile_.skins.entity_quality, knife_unusual_quality))
+                return false;
+        } else if (values.stattrak >= 0) {
             if (!write_scalar(memory_, item_view + profile_.skins.entity_quality, stattrak_quality)) return false;
         } else if (orig_it != originals_.end()) {
             write_scalar(memory_, item_view + profile_.skins.entity_quality, orig_it->second.entity_quality);
@@ -571,11 +703,22 @@ bool MemoryCosmeticAdapter::write(std::uint64_t identity, const CosmeticValues& 
         return true;
     }
 
-    // Restore mode: return weapon fields and econ metadata to captured baseline.
+    // Restore mode: return weapon fields, knife subclass/definition, and econ metadata to captured baseline.
     const std::int32_t kit = orig_it != originals_.end() ? orig_it->second.raw_paint_kit : static_cast<std::int32_t>(values.paint_kit);
     const std::int32_t seed = orig_it != originals_.end() ? orig_it->second.raw_seed : static_cast<std::int32_t>(values.seed);
     const float wear = orig_it != originals_.end() ? orig_it->second.raw_wear : values.wear;
     const std::int32_t stattrak = orig_it != originals_.end() ? orig_it->second.raw_stattrak : values.stattrak;
+    if (orig_it != originals_.end()) {
+        if (!write_scalar(memory_, item_view + profile_.skins.item_definition_index,
+                          orig_it->second.item_definition_index)) {
+            return false;
+        }
+        if (orig_it->second.has_subclass_id && profile_.skins.subclass_id != 0) {
+            if (!write_scalar(memory_, weapon + profile_.skins.subclass_id, orig_it->second.subclass_id)) {
+                return false;
+            }
+        }
+    }
     if (!write_scalar(memory_, weapon + profile_.skins.fallback_paint_kit, kit)) return false;
     if (!write_scalar(memory_, weapon + profile_.skins.fallback_seed, seed)) return false;
     if (!write_scalar(memory_, weapon + profile_.skins.fallback_wear, wear)) return false;
@@ -622,12 +765,23 @@ bool MemoryCosmeticAdapter::refresh(std::uint64_t identity) {
                 if (!write_mesh_group(vm_entity, desired_mesh)) return false;
             }
         }
+        const std::uint32_t target_def =
+            mode_it != pending_.end() ? mode_it->second.extras.target_definition : 0u;
+        if (target_def != 0 && knife_model_refresh_) {
+            if (!knife_model_refresh_(weapon, vm_entity, target_def, knife_model_path(target_def)))
+                return false;
+        }
     } else if (orig_it != originals_.end()) {
         if (orig_it->second.has_weapon_mesh) {
             if (!write_mesh_group(weapon, orig_it->second.weapon_mesh_group)) return false;
         }
         if (vm_entity && orig_it->second.has_viewmodel_mesh) {
             if (!write_mesh_group(vm_entity, orig_it->second.viewmodel_mesh_group)) return false;
+        }
+        if (knife_model_refresh_ && is_knife_definition(orig_it->second.item_definition_index)) {
+            const std::uint32_t orig_def = orig_it->second.item_definition_index;
+            if (!knife_model_refresh_(weapon, vm_entity, orig_def, knife_model_path(orig_def)))
+                return false;
         }
     }
 
@@ -659,14 +813,26 @@ int32_t CosmeticController::apply(CosmeticAdapter& adapter, std::uint64_t identi
         !valid_custom_name(extras.custom_name) || !valid_mesh_group(extras.mesh_group_mask)) {
         return PHANTOM_INVALID_ARGUMENT;
     }
+    if (extras.target_definition != 0 &&
+        (!is_custom_knife_definition(extras.target_definition) ||
+         extras.target_definition != preference.weapon_definition)) {
+        return PHANTOM_INVALID_ARGUMENT;
+    }
     try {
         CosmeticItem current{};
-        if (!adapter.read(identity, current) || !matching(current, identity, preference.weapon_definition) ||
-            !valid_values(current.values)) return PHANTOM_STALE_DATA;
+        if (!adapter.read(identity, current) ||
+            !matching_knife_swap(current, identity, preference.weapon_definition, extras.target_definition) ||
+            !valid_values(current.values)) {
+            return PHANTOM_STALE_DATA;
+        }
         auto entry = std::find_if(entries_.begin(), entries_.end(),
                                   [identity](const Entry& e) { return e.identity == identity; });
-        if (entry != entries_.end() && entry->weapon_definition != current.weapon_definition)
-            return PHANTOM_STALE_DATA;
+        if (entry != entries_.end()) {
+            const bool def_ok = (entry->weapon_definition == current.weapon_definition) ||
+                                (entry->active_extras.target_definition != 0 &&
+                                 current.weapon_definition == entry->active_extras.target_definition);
+            if (!def_ok) return PHANTOM_STALE_DATA;
+        }
         if (entry == entries_.end()) {
             entry = std::find_if(entries_.begin(), entries_.end(), [](const Entry& e) { return !e.identity; });
             if (entry == entries_.end()) return PHANTOM_CAPACITY_REACHED;
@@ -681,7 +847,11 @@ int32_t CosmeticController::apply(CosmeticAdapter& adapter, std::uint64_t identi
         // Keep the original baseline even after failure so restore can be retried.
         // Re-read before rollback: the slot may now belong to a different entity.
         CosmeticItem after{};
-        if (adapter.read(identity, after) && matching(after, identity, entry->weapon_definition)) {
+        const std::uint32_t expected_after =
+            extras.target_definition != 0 ? extras.target_definition : entry->weapon_definition;
+        if (adapter.read(identity, after) &&
+            (matching(after, identity, entry->weapon_definition) ||
+             matching(after, identity, expected_after))) {
             if (entry->had_override) adapter.set_pending_extras(identity, entry->active_extras);
             else adapter.clear_pending_extras(identity);
             if (adapter.write(identity, current.values)) adapter.refresh(identity);
@@ -698,7 +868,10 @@ int32_t CosmeticController::restore(CosmeticAdapter& adapter, std::uint64_t iden
     try {
         CosmeticItem current{};
         if (!adapter.read(identity, current)) return PHANTOM_STALE_DATA;
-        if (!matching(current, identity, entry->weapon_definition)) {
+        const bool same_item = matching(current, identity, entry->weapon_definition) ||
+                               (entry->active_extras.target_definition != 0 &&
+                                matching(current, identity, entry->active_extras.target_definition));
+        if (!same_item) {
             // Never restore a recycled handle or a dropped weapon. Its old address
             // is no longer ours; forget the baseline rather than touching it.
             adapter.clear_pending_extras(identity);
@@ -714,31 +887,53 @@ int32_t CosmeticController::restore(CosmeticAdapter& adapter, std::uint64_t iden
 
 int32_t CosmeticController::apply_loadout(CosmeticAdapter& adapter,
                                           const std::vector<CosmeticPreferenceEntry>& loadout,
-                                          CosmeticRunReport& report) {
+                                          CosmeticRunReport& report,
+                                          std::uint32_t knife_override) {
     report = {};
+    if (knife_override != 0 && !is_custom_knife_definition(knife_override)) {
+        return PHANTOM_INVALID_ARGUMENT;
+    }
     std::vector<CosmeticItem> weapons;
     if (!adapter.enumerate_local_weapons(weapons)) return PHANTOM_STALE_DATA;
     report.weapons_found = static_cast<std::uint32_t>(weapons.size());
 
     // Restore or prune previously overridden weapons whose definitions were removed or dropped.
-    std::vector<std::pair<std::uint64_t, std::uint32_t>> tracked;
+    std::vector<std::tuple<std::uint64_t, std::uint32_t, std::uint32_t>> tracked;
     for (const Entry& entry : entries_) {
-        if (entry.identity) tracked.emplace_back(entry.identity, entry.weapon_definition);
+        if (entry.identity) {
+            tracked.emplace_back(entry.identity, entry.weapon_definition,
+                                 entry.active_extras.target_definition);
+        }
     }
-    for (const auto& [identity, def] : tracked) {
+    for (const auto& [identity, orig_def, target_def] : tracked) {
         const bool present_locally = std::any_of(weapons.begin(), weapons.end(),
                                                  [identity](const CosmeticItem& w) { return w.identity == identity; });
-        const bool still_configured = std::any_of(loadout.begin(), loadout.end(),
-                                                  [def](const CosmeticPreferenceEntry& p) {
-                                                      return p.preference.weapon_definition == def;
-                                                  });
+        bool still_configured = false;
+        if (is_knife_definition(orig_def)) {
+            if (knife_override != 0) {
+                still_configured = true;
+            } else {
+                still_configured = std::any_of(loadout.begin(), loadout.end(),
+                                               [orig_def](const CosmeticPreferenceEntry& p) {
+                                                   return p.preference.weapon_definition == orig_def;
+                                               });
+            }
+        } else {
+            still_configured = std::any_of(loadout.begin(), loadout.end(),
+                                           [orig_def](const CosmeticPreferenceEntry& p) {
+                                               return p.preference.weapon_definition == orig_def;
+                                           });
+        }
         if (!still_configured) {
             const int32_t status = restore(adapter, identity);
             if (status == PHANTOM_OK) ++report.weapons_restored;
             else if (status == PHANTOM_INTERNAL_ERROR) ++report.weapons_failed;
         } else if (!present_locally) {
             CosmeticItem probe{};
-            if (!adapter.read(identity, probe) || !matching(probe, identity, def)) {
+            const bool valid_probe = adapter.read(identity, probe) &&
+                                     (matching(probe, identity, orig_def) ||
+                                      (target_def != 0 && matching(probe, identity, target_def)));
+            if (!valid_probe) {
                 auto slot = std::find_if(entries_.begin(), entries_.end(),
                                          [identity](const Entry& e) { return e.identity == identity; });
                 if (slot != entries_.end()) {
@@ -750,20 +945,53 @@ int32_t CosmeticController::apply_loadout(CosmeticAdapter& adapter,
     }
 
     for (const CosmeticItem& weapon : weapons) {
-        const auto pref_it = std::find_if(loadout.begin(), loadout.end(),
-                                          [&weapon](const CosmeticPreferenceEntry& p) {
-                                              return p.preference.weapon_definition == weapon.weapon_definition;
-                                          });
-        if (pref_it == loadout.end()) continue;
-        const CosmeticValues desired{pref_it->preference.paint_kit, pref_it->preference.seed,
-                                     pref_it->preference.wear, pref_it->preference.stattrak};
+        PhantomCosmeticPreference desired_pref{};
+        CosmeticExtras desired_extras{};
+        bool should_apply = false;
+
+        if (knife_override != 0 && is_knife_definition(weapon.weapon_definition)) {
+            const auto knife_it = std::find_if(loadout.begin(), loadout.end(),
+                                               [knife_override](const CosmeticPreferenceEntry& p) {
+                                                   return p.preference.weapon_definition == knife_override;
+                                               });
+            if (knife_it != loadout.end()) {
+                desired_pref = knife_it->preference;
+                desired_extras = knife_it->extras;
+            } else {
+                desired_pref.struct_size = sizeof(desired_pref);
+                desired_pref.weapon_definition = knife_override;
+                desired_pref.paint_kit = 0;
+                desired_pref.seed = 0;
+                desired_pref.wear = 0.001f;
+                desired_pref.stattrak = -1;
+            }
+            desired_extras.target_definition = knife_override;
+            should_apply = true;
+        } else {
+            const auto pref_it = std::find_if(loadout.begin(), loadout.end(),
+                                              [&weapon](const CosmeticPreferenceEntry& p) {
+                                                  return p.preference.weapon_definition == weapon.weapon_definition;
+                                              });
+            if (pref_it != loadout.end()) {
+                desired_pref = pref_it->preference;
+                desired_extras = pref_it->extras;
+                should_apply = true;
+            }
+        }
+        if (!should_apply) continue;
+
+        const CosmeticValues desired{desired_pref.paint_kit, desired_pref.seed,
+                                     desired_pref.wear, desired_pref.stattrak};
         const auto existing = std::find_if(entries_.begin(), entries_.end(),
                                            [&weapon](const Entry& e) { return e.identity == weapon.identity; });
         if (existing != entries_.end() && existing->had_override &&
-            values_equal(weapon.values, desired) && extras_equal(existing->active_extras, pref_it->extras)) {
-            continue;
+            values_equal(weapon.values, desired) && extras_equal(existing->active_extras, desired_extras)) {
+            if (desired_extras.target_definition == 0 ||
+                weapon.weapon_definition == desired_extras.target_definition) {
+                continue;
+            }
         }
-        const int32_t status = apply(adapter, weapon.identity, pref_it->preference, pref_it->extras);
+        const int32_t status = apply(adapter, weapon.identity, desired_pref, desired_extras);
         if (status == PHANTOM_OK) ++report.weapons_applied;
         else ++report.weapons_failed;
     }

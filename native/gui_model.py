@@ -6,7 +6,7 @@ from pathlib import Path
 
 from .config import Config, config_path, load_config, save_config, validate_config
 from .presets import preset_config
-from .skins import STARTER_LOADOUTS, export_loadout, validate_skin_entry
+from .skins import STARTER_LOADOUTS, export_loadout, is_custom_knife, validate_knife_override, validate_skin_entry
 
 # label, config key, display multiplier, min, max, decimals, suffix
 SLIDERS = (
@@ -68,19 +68,37 @@ class SettingsModel:
         self.set('skins', skins)
         return True
 
+    def set_knife_override(self, knife_definition):
+        self.set('knife_override', validate_knife_override(knife_definition))
+
     def clear_skins(self):
-        if not self.config.skins:
+        if not self.config.skins and self.config.knife_override == 0:
             return
-        self.set('skins', {})
+        settings = asdict(self.config)
+        settings['skins'] = {}
+        settings['knife_override'] = 0
+        self.config = validate_config({'version': 1, 'settings': settings})
+        self.revision += 1
 
     def apply_skin_pack(self, name):
         if name not in STARTER_LOADOUTS:
             raise ValueError('Unknown starter skin pack.')
         pack = {k: dict(v) for k, v in STARTER_LOADOUTS[name].items()}
-        self.set('skins', pack)
+        settings = asdict(self.config)
+        settings['skins'] = pack
+        knife_keys = [int(k) for k in sorted(pack, key=int) if is_custom_knife(int(k))]
+        if knife_keys and settings['knife_override'] not in knife_keys:
+            settings['knife_override'] = knife_keys[0]
+        self.config = validate_config({'version': 1, 'settings': settings})
+        self.revision += 1
 
     def export_skins(self):
-        return export_loadout(self.directory, self.config.skin_changer, self.config.skins)
+        return export_loadout(
+            self.directory,
+            self.config.skin_changer,
+            self.config.skins,
+            knife_override=self.config.knife_override,
+        )
 
     def reset(self, key):
         self.set(key, asdict(Config())[key])

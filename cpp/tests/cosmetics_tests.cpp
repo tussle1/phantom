@@ -4,6 +4,7 @@
 #include <cstring>
 #include <limits>
 #include <map>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -390,6 +391,145 @@ void loadout_json_tests() {
     }
     check(enabled && entries.size() == 1 && entries[0].extras.custom_name == "keep",
           "failed parse does not mutate caller output");
+
+    // knife_override JSON parsing.
+    std::uint32_t knife_override = 0;
+    const std::string knife_json = R"({
+        "version": 1,
+        "enabled": true,
+        "knife_override": 507,
+        "entries": [
+            {
+                "weapon_definition": 507,
+                "paint_kit": 415,
+                "seed": 387,
+                "wear": 0.01,
+                "stattrak": 77,
+                "custom_name": "ruby blade",
+                "mesh_group": 1
+            }
+        ]
+    })";
+    check(phantom::parse_skin_loadout_json(knife_json, enabled, entries, knife_override) &&
+          enabled && knife_override == 507 && entries.size() == 1 &&
+          entries[0].preference.weapon_definition == 507 && entries[0].preference.paint_kit == 415,
+          "loadout json with knife_override parses cleanly");
+    check(phantom::parse_skin_loadout_json(R"({"version":1,"enabled":true,"knife_override":0,"entries":[]})",
+                                           enabled, entries, knife_override) &&
+          knife_override == 0, "loadout json with knife_override=0 parses cleanly");
+    knife_override = 515;
+    check(!phantom::parse_skin_loadout_json(R"({"version":1,"enabled":true,"knife_override":7,"entries":[]})",
+                                            enabled, entries, knife_override) &&
+          knife_override == 515, "non-knife weapon rejected in knife_override without mutating output");
+    check(!phantom::parse_skin_loadout_json(R"({"version":1,"enabled":true,"knife_override":42,"entries":[]})",
+                                            enabled, entries, knife_override) &&
+          knife_override == 515, "default CT knife rejected as custom knife_override");
+}
+
+void knife_override_tests() {
+    // Verify all 20 CS2 custom knives are recognized with canonical .vmdl paths and unique subclass tokens.
+    const std::uint32_t all_knives[] = {
+        500, 503, 505, 506, 507, 508, 509, 512, 514, 515,
+        516, 517, 518, 519, 520, 521, 522, 523, 525, 526,
+    };
+    std::set<std::uint32_t> tokens;
+    for (std::uint32_t id : all_knives) {
+        check(phantom::is_custom_knife_definition(id) && phantom::is_knife_definition(id),
+              "custom knife ID recognized");
+        const char* vmdl = phantom::knife_model_path(id);
+        check(vmdl != nullptr && std::strstr(vmdl, ".vmdl") != nullptr, "custom knife has .vmdl path");
+        const std::string s = std::to_string(id);
+        const std::uint32_t tok = phantom::utl_string_token(s.c_str());
+        check(tok != 0 && tokens.insert(tok).second, "custom knife subclass token is non-zero and unique");
+    }
+    check(phantom::is_knife_definition(42) && !phantom::is_custom_knife_definition(42),
+          "default CT knife recognized as knife but not custom target");
+    check(phantom::is_knife_definition(59) && !phantom::is_custom_knife_definition(59),
+          "default T knife recognized as knife but not custom target");
+    check(!phantom::is_knife_definition(7) && !phantom::is_custom_knife_definition(7) &&
+          phantom::knife_model_path(7) == nullptr, "AK-47 is not a knife");
+
+    // MemoryCosmeticAdapter + CosmeticController knife swap, switch, idempotency, and full restore.
+    SkinMemoryFixture fx;
+    const std::uintptr_t knife_ptr = 0x52000000;
+    const std::uintptr_t knife_scene = 0x52100000;
+    const std::uintptr_t knife_vm = 0x52200000;
+    const std::uintptr_t knife_vm_scene = 0x52300000;
+    const std::uint32_t knife_handle = (15u << 15) | 205u;
+    const std::uint32_t knife_vm_handle = (16u << 15) | 206u;
+
+    fx.memory.put<std::int32_t>(fx.weapon_services + fx.profile.skins.my_weapons, 3);
+    fx.memory.put(fx.weapon_list_data + 8, knife_handle);
+    fx.setup_weapon(knife_handle, knife_ptr, knife_scene, 42, 0, 0, 0.0f, -1,
+                    0x00030000u, 300u, 4, "", 1ULL, knife_vm_handle, knife_vm, knife_vm_scene);
+    const std::uint32_t orig_subclass = phantom::utl_string_token("42");
+    fx.memory.put(knife_ptr + fx.profile.skins.subclass_id, orig_subclass);
+
+    int model_hooks = 0;
+    std::uint32_t last_hook_def = 0;
+    std::string last_hook_model;
+    phantom::MemoryCosmeticAdapter adapter(
+        fx.memory, fx.base, fx.profile, nullptr,
+        [&](std::uintptr_t w, std::uintptr_t vm, std::uint32_t def, const char* vmdl) {
+            if (w != knife_ptr || vm != knife_vm) return false;
+            ++model_hooks;
+            last_hook_def = def;
+            last_hook_model = vmdl ? vmdl : "";
+            return true;
+        });
+
+    phantom::CosmeticController controller;
+    phantom::CosmeticPreferenceEntry karambit_entry{
+        {sizeof(PhantomCosmeticPreference), 507, 415, 387, 0.01f, 77},
+        {"ruby karambit", 1, 0},
+    };
+    phantom::CosmeticRunReport report{};
+    check(controller.apply_loadout(adapter, {karambit_entry}, report, 507) == PHANTOM_OK &&
+          report.weapons_found == 3 && report.weapons_applied == 1 && report.weapons_failed == 0,
+          "knife_override applies Karambit Doppler Ruby onto default CT knife");
+
+    const std::uintptr_t knife_item = knife_ptr + fx.profile.skins.attribute_manager + fx.profile.skins.econ_item;
+    check(fx.memory.get<std::uint16_t>(knife_item + fx.profile.skins.item_definition_index) == 507,
+          "item_definition_index swapped from 42 to 507");
+    check(fx.memory.get<std::uint32_t>(knife_ptr + fx.profile.skins.subclass_id) == phantom::utl_string_token("507"),
+          "m_nSubclassID updated to MurmurHash2(\"507\")");
+    check(fx.memory.get<std::int32_t>(knife_item + fx.profile.skins.entity_quality) == 3,
+          "knife entity_quality set to 3 (star unusual)");
+    check(fx.memory.get<std::int32_t>(knife_ptr + fx.profile.skins.fallback_paint_kit) == 415 &&
+          fx.memory.get<std::int32_t>(knife_ptr + fx.profile.skins.fallback_seed) == 387 &&
+          fx.memory.get<std::int32_t>(knife_ptr + fx.profile.skins.fallback_stattrak) == 77,
+          "knife fallback paint kit, seed, and StatTrak written");
+    check(model_hooks == 1 && last_hook_def == 507 &&
+          last_hook_model == "weapons/models/knife/knife_karambit/weapon_knife_karambit.vmdl",
+          "optional knife model hook invoked with Karambit .vmdl");
+
+    // Second pass is idempotent — no redundant writes or hooks.
+    check(controller.apply_loadout(adapter, {karambit_entry}, report, 507) == PHANTOM_OK &&
+          report.weapons_applied == 0 && model_hooks == 1,
+          "repeated knife apply_loadout is idempotent");
+
+    // Switching knife_override to Butterfly (515) with NO loadout entry applies Vanilla Butterfly cleanly!
+    check(controller.apply_loadout(adapter, {}, report, 515) == PHANTOM_OK &&
+          report.weapons_applied == 1 && report.weapons_restored == 0,
+          "switching knife_override to Butterfly applies Vanilla Butterfly");
+    check(fx.memory.get<std::uint16_t>(knife_item + fx.profile.skins.item_definition_index) == 515 &&
+          fx.memory.get<std::uint32_t>(knife_ptr + fx.profile.skins.subclass_id) == phantom::utl_string_token("515") &&
+          fx.memory.get<std::int32_t>(knife_ptr + fx.profile.skins.fallback_paint_kit) == 0 &&
+          model_hooks == 2 && last_hook_def == 515 &&
+          last_hook_model == "weapons/models/knife/knife_butterfly/weapon_knife_butterfly.vmdl",
+          "Butterfly definition, subclass token, vanilla paint_kit, and .vmdl hook updated");
+
+    // Clearing knife_override back to 0 restores the exact original default CT knife (42)!
+    check(controller.apply_loadout(adapter, {}, report, 0) == PHANTOM_OK &&
+          report.weapons_restored == 1 && controller.active_count() == 0,
+          "clearing knife_override restores default CT knife");
+    check(fx.memory.get<std::uint16_t>(knife_item + fx.profile.skins.item_definition_index) == 42 &&
+          fx.memory.get<std::uint32_t>(knife_ptr + fx.profile.skins.subclass_id) == orig_subclass &&
+          fx.memory.get<std::int32_t>(knife_item + fx.profile.skins.entity_quality) == 4 &&
+          fx.memory.get<std::uint32_t>(knife_item + fx.profile.skins.item_id_high) == 0x00030000u &&
+          model_hooks == 3 && last_hook_def == 42 &&
+          last_hook_model == "weapons/models/knife/knife_default_ct/weapon_knife_default_ct.vmdl",
+          "default CT knife definition, subclass token, quality, and .vmdl fully restored");
 }
 } // namespace
 
@@ -397,6 +537,7 @@ int main() {
     controller_tests();
     memory_adapter_tests();
     loadout_json_tests();
+    knife_override_tests();
     if (failures) return 1;
     std::printf("cosmetic controller & memory adapter tests passed (%d checks)\n", checks);
     return 0;

@@ -54,6 +54,7 @@ struct BombFieldLayout {
 struct SkinFieldLayout {
     std::uint32_t weapon_services = 0, my_weapons = 0, active_weapon = 0;
     std::uint32_t entity_identity = 0, identity_handle = 0, owner_entity = 0, steam_id = 0;
+    std::uint32_t subclass_id = 0;
     std::uint32_t attributes_initialized = 0, attribute_manager = 0, econ_item = 0;
     std::uint32_t item_definition_index = 0, entity_quality = 0;
     std::uint32_t item_id_high = 0, item_id_low = 0, account_id = 0, item_initialized = 0;

@@ -46,6 +46,8 @@ class WeaponDef:
     definition: int
     name: str
     category: str
+    model_path: str = ''
+    is_knife: bool = False
 
 
 @dataclass(frozen=True)
@@ -58,9 +60,41 @@ class PaintKit:
     mesh_group: str = 'auto'
 
 
-WEAPON_CATEGORIES = ('All', 'Rifles', 'Snipers', 'Pistols', 'SMGs', 'Heavy')
+WEAPON_CATEGORIES = ('All', 'Knives', 'Rifles', 'Snipers', 'Pistols', 'SMGs', 'Heavy')
+
+DEFAULT_KNIFE_DEFINITIONS = frozenset((42, 59))
+DEFAULT_KNIFE_MODELS = {
+    42: 'weapons/models/knife/knife_default_ct/weapon_knife_default_ct.vmdl',
+    59: 'weapons/models/knife/knife_default_t/weapon_knife_default_t.vmdl',
+}
+
+KNIVES = (
+    WeaponDef(500, 'Bayonet', 'Knives', 'weapons/models/knife/knife_bayonet/weapon_knife_bayonet.vmdl', True),
+    WeaponDef(503, 'Classic Knife', 'Knives', 'weapons/models/knife/knife_css/weapon_knife_css.vmdl', True),
+    WeaponDef(505, 'Flip Knife', 'Knives', 'weapons/models/knife/knife_flip/weapon_knife_flip.vmdl', True),
+    WeaponDef(506, 'Gut Knife', 'Knives', 'weapons/models/knife/knife_gut/weapon_knife_gut.vmdl', True),
+    WeaponDef(507, 'Karambit', 'Knives', 'weapons/models/knife/knife_karambit/weapon_knife_karambit.vmdl', True),
+    WeaponDef(508, 'M9 Bayonet', 'Knives', 'weapons/models/knife/knife_m9/weapon_knife_m9.vmdl', True),
+    WeaponDef(509, 'Huntsman Knife', 'Knives', 'weapons/models/knife/knife_tactical/weapon_knife_tactical.vmdl', True),
+    WeaponDef(512, 'Falchion Knife', 'Knives', 'weapons/models/knife/knife_falchion/weapon_knife_falchion.vmdl', True),
+    WeaponDef(514, 'Bowie Knife', 'Knives', 'weapons/models/knife/knife_bowie/weapon_knife_bowie.vmdl', True),
+    WeaponDef(515, 'Butterfly Knife', 'Knives', 'weapons/models/knife/knife_butterfly/weapon_knife_butterfly.vmdl', True),
+    WeaponDef(516, 'Shadow Daggers', 'Knives', 'weapons/models/knife/knife_push/weapon_knife_push.vmdl', True),
+    WeaponDef(517, 'Paracord Knife', 'Knives', 'weapons/models/knife/knife_cord/weapon_knife_cord.vmdl', True),
+    WeaponDef(518, 'Survival Knife', 'Knives', 'weapons/models/knife/knife_canis/weapon_knife_canis.vmdl', True),
+    WeaponDef(519, 'Ursus Knife', 'Knives', 'weapons/models/knife/knife_ursus/weapon_knife_ursus.vmdl', True),
+    WeaponDef(520, 'Navaja Knife', 'Knives', 'weapons/models/knife/knife_gypsy_jackknife/weapon_knife_gypsy_jackknife.vmdl', True),
+    WeaponDef(521, 'Nomad Knife', 'Knives', 'weapons/models/knife/knife_outdoor/weapon_knife_outdoor.vmdl', True),
+    WeaponDef(522, 'Stiletto Knife', 'Knives', 'weapons/models/knife/knife_stiletto/weapon_knife_stiletto.vmdl', True),
+    WeaponDef(523, 'Talon Knife', 'Knives', 'weapons/models/knife/knife_widowmaker/weapon_knife_widowmaker.vmdl', True),
+    WeaponDef(525, 'Skeleton Knife', 'Knives', 'weapons/models/knife/knife_skeleton/weapon_knife_skeleton.vmdl', True),
+    WeaponDef(526, 'Kukri Knife', 'Knives', 'weapons/models/knife/knife_kukri/weapon_knife_kukri.vmdl', True),
+)
+KNIFE_IDS = tuple(k.definition for k in KNIVES)
+KNIFE_DEFINITIONS = frozenset(KNIFE_IDS)
 
 WEAPONS = (
+    *KNIVES,
     # Rifles
     WeaponDef(7, 'AK-47', 'Rifles'),
     WeaponDef(16, 'M4A4', 'Rifles'),
@@ -177,6 +211,84 @@ PAINT_KITS = (
     PaintKit(919, 'Commemoration', 'Covert', ('#d4af37', '#78350f', '#fde68a'), (10,), 'legacy'),
     PaintKit(433, 'Neon Rider', 'Covert', ('#fc589b', '#2ec4e6', '#5e2b97'), (17,), 'legacy'),
     PaintKit(556, 'Primal Saber', 'Classified', ('#1f1f26', '#22d3ee', '#f5f5f5'), (24,), 'legacy'),
+    # Knives — universal finishes available locally on all 20 custom CS2 knives
+    PaintKit(38, 'Fade', 'Covert', ('#ff6fa8', '#f5b841', '#8858ff'), KNIFE_IDS, 'modern'),
+    PaintKit(413, 'Marble Fade', 'Covert', ('#e84040', '#f0cf4b', '#3076e8'), KNIFE_IDS, 'modern'),
+    PaintKit(409, 'Tiger Tooth', 'Covert', ('#f0b636', '#a86b18', '#332210'), KNIFE_IDS, 'modern'),
+    PaintKit(415, 'Doppler (Ruby)', 'Covert', ('#e81c45', '#960e2e', '#380914'), KNIFE_IDS, 'modern'),
+    PaintKit(416, 'Doppler (Sapphire)', 'Covert', ('#2462ff', '#132fa6', '#0c164a'), KNIFE_IDS, 'modern'),
+    PaintKit(417, 'Doppler (Black Pearl)', 'Covert', ('#4f2e78', '#221438', '#0d0914'), KNIFE_IDS, 'modern'),
+    PaintKit(418, 'Doppler (Phase 1)', 'Covert', ('#b02c6c', '#3c1b3a', '#161020'), KNIFE_IDS, 'modern'),
+    PaintKit(419, 'Doppler (Phase 2)', 'Covert', ('#f252a6', '#7e2260', '#2b1026'), KNIFE_IDS, 'modern'),
+    PaintKit(420, 'Doppler (Phase 3)', 'Covert', ('#2e8c78', '#244b7a', '#101824'), KNIFE_IDS, 'modern'),
+    PaintKit(421, 'Doppler (Phase 4)', 'Covert', ('#3278f0', '#1d3670', '#0e1628'), KNIFE_IDS, 'modern'),
+    PaintKit(568, 'Gamma Doppler (Emerald)', 'Covert', ('#2ce878', '#118f48', '#0a331d'), KNIFE_IDS, 'modern'),
+    PaintKit(569, 'Gamma Doppler (Phase 1)', 'Covert', ('#2ea874', '#1b4a42', '#101d20'), KNIFE_IDS, 'modern'),
+    PaintKit(570, 'Gamma Doppler (Phase 2)', 'Covert', ('#3ce08c', '#1c7e54', '#0e2c22'), KNIFE_IDS, 'modern'),
+    PaintKit(571, 'Gamma Doppler (Phase 3)', 'Covert', ('#32d2c8', '#1a6875', '#0f222a'), KNIFE_IDS, 'modern'),
+    PaintKit(572, 'Gamma Doppler (Phase 4)', 'Covert', ('#68e048', '#248c5e', '#102820'), KNIFE_IDS, 'modern'),
+    # Knives — authentic per-knife Gamma & Dreams/Riptide IDs (with canonical fallback for newer knives)
+    PaintKit(558, 'Lore', 'Covert', ('#e6bd4e', '#9a7424', '#2c2920'), (500,), 'modern'),
+    PaintKit(559, 'Lore', 'Covert', ('#e6bd4e', '#9a7424', '#2c2920'), (505,), 'modern'),
+    PaintKit(560, 'Lore', 'Covert', ('#e6bd4e', '#9a7424', '#2c2920'), (506,), 'modern'),
+    PaintKit(561, 'Lore', 'Covert', ('#e6bd4e', '#9a7424', '#2c2920'), (507, 503, 517, 518, 519, 520, 521, 522, 523, 525, 526), 'modern'),
+    PaintKit(562, 'Lore', 'Covert', ('#e6bd4e', '#9a7424', '#2c2920'), (508,), 'modern'),
+    PaintKit(1104, 'Lore', 'Covert', ('#e6bd4e', '#9a7424', '#2c2920'), (514,), 'modern'),
+    PaintKit(1105, 'Lore', 'Covert', ('#e6bd4e', '#9a7424', '#2c2920'), (515,), 'modern'),
+    PaintKit(1106, 'Lore', 'Covert', ('#e6bd4e', '#9a7424', '#2c2920'), (512,), 'modern'),
+    PaintKit(1107, 'Lore', 'Covert', ('#e6bd4e', '#9a7424', '#2c2920'), (509,), 'modern'),
+    PaintKit(1108, 'Lore', 'Covert', ('#e6bd4e', '#9a7424', '#2c2920'), (516,), 'modern'),
+    PaintKit(573, 'Autotronic', 'Covert', ('#cc2936', '#c4cad4', '#2a2d36'), (500,), 'modern'),
+    PaintKit(574, 'Autotronic', 'Covert', ('#cc2936', '#c4cad4', '#2a2d36'), (505,), 'modern'),
+    PaintKit(575, 'Autotronic', 'Covert', ('#cc2936', '#c4cad4', '#2a2d36'), (506,), 'modern'),
+    PaintKit(576, 'Autotronic', 'Covert', ('#cc2936', '#c4cad4', '#2a2d36'), (507, 503, 517, 518, 519, 520, 521, 522, 523, 525, 526), 'modern'),
+    PaintKit(577, 'Autotronic', 'Covert', ('#cc2936', '#c4cad4', '#2a2d36'), (508,), 'modern'),
+    PaintKit(1114, 'Autotronic', 'Covert', ('#cc2936', '#c4cad4', '#2a2d36'), (514,), 'modern'),
+    PaintKit(1115, 'Autotronic', 'Covert', ('#cc2936', '#c4cad4', '#2a2d36'), (515,), 'modern'),
+    PaintKit(1116, 'Autotronic', 'Covert', ('#cc2936', '#c4cad4', '#2a2d36'), (512,), 'modern'),
+    PaintKit(1117, 'Autotronic', 'Covert', ('#cc2936', '#c4cad4', '#2a2d36'), (509,), 'modern'),
+    PaintKit(1118, 'Autotronic', 'Covert', ('#cc2936', '#c4cad4', '#2a2d36'), (516,), 'modern'),
+    PaintKit(563, 'Black Laminate', 'Covert', ('#3a3e46', '#22242a', '#6b5344'), (500,), 'modern'),
+    PaintKit(564, 'Black Laminate', 'Covert', ('#3a3e46', '#22242a', '#6b5344'), (505,), 'modern'),
+    PaintKit(565, 'Black Laminate', 'Covert', ('#3a3e46', '#22242a', '#6b5344'), (506,), 'modern'),
+    PaintKit(566, 'Black Laminate', 'Covert', ('#3a3e46', '#22242a', '#6b5344'), (507, 503, 517, 518, 519, 520, 521, 522, 523, 525, 526), 'modern'),
+    PaintKit(567, 'Black Laminate', 'Covert', ('#3a3e46', '#22242a', '#6b5344'), (508,), 'modern'),
+    PaintKit(1109, 'Black Laminate', 'Covert', ('#3a3e46', '#22242a', '#6b5344'), (514,), 'modern'),
+    PaintKit(1110, 'Black Laminate', 'Covert', ('#3a3e46', '#22242a', '#6b5344'), (515,), 'modern'),
+    PaintKit(1111, 'Black Laminate', 'Covert', ('#3a3e46', '#22242a', '#6b5344'), (512,), 'modern'),
+    PaintKit(1112, 'Black Laminate', 'Covert', ('#3a3e46', '#22242a', '#6b5344'), (509,), 'modern'),
+    PaintKit(1113, 'Black Laminate', 'Covert', ('#3a3e46', '#22242a', '#6b5344'), (516,), 'modern'),
+    PaintKit(580, 'Freehand', 'Covert', ('#8452c8', '#e6e8f0', '#2b1e48'), (500, 505, 506), 'modern'),
+    PaintKit(581, 'Freehand', 'Covert', ('#8452c8', '#e6e8f0', '#2b1e48'), (508, 503, 517, 518, 519, 520, 521, 522, 523, 525, 526), 'modern'),
+    PaintKit(582, 'Freehand', 'Covert', ('#8452c8', '#e6e8f0', '#2b1e48'), (507,), 'modern'),
+    PaintKit(1119, 'Freehand', 'Covert', ('#8452c8', '#e6e8f0', '#2b1e48'), (514,), 'modern'),
+    PaintKit(1120, 'Freehand', 'Covert', ('#8452c8', '#e6e8f0', '#2b1e48'), (515,), 'modern'),
+    PaintKit(1121, 'Freehand', 'Covert', ('#8452c8', '#e6e8f0', '#2b1e48'), (512,), 'modern'),
+    PaintKit(1122, 'Freehand', 'Covert', ('#8452c8', '#e6e8f0', '#2b1e48'), (509,), 'modern'),
+    PaintKit(1123, 'Freehand', 'Covert', ('#8452c8', '#e6e8f0', '#2b1e48'), (516,), 'modern'),
+    PaintKit(578, 'Bright Water', 'Covert', ('#3874c4', '#72a8e6', '#1e3554'), (500, 505, 506, 507, 503, 517, 518, 519, 520, 521, 522, 523, 525, 526), 'modern'),
+    PaintKit(579, 'Bright Water', 'Covert', ('#3874c4', '#72a8e6', '#1e3554'), (508,), 'modern'),
+    PaintKit(1124, 'Bright Water', 'Covert', ('#3874c4', '#72a8e6', '#1e3554'), (514,), 'modern'),
+    PaintKit(1125, 'Bright Water', 'Covert', ('#3874c4', '#72a8e6', '#1e3554'), (515,), 'modern'),
+    PaintKit(1126, 'Bright Water', 'Covert', ('#3874c4', '#72a8e6', '#1e3554'), (512,), 'modern'),
+    PaintKit(1127, 'Bright Water', 'Covert', ('#3874c4', '#72a8e6', '#1e3554'), (509,), 'modern'),
+    PaintKit(1128, 'Bright Water', 'Covert', ('#3874c4', '#72a8e6', '#1e3554'), (516,), 'modern'),
+    # Knives — classic & tactical finishes across all 20 custom CS2 knives
+    PaintKit(12, 'Crimson Web', 'Covert', ('#b51d2a', '#5c1118', '#1a1a1f'), KNIFE_IDS, 'modern'),
+    PaintKit(59, 'Slaughter', 'Covert', ('#d42e48', '#8a182c', '#3c1420'), KNIFE_IDS, 'modern'),
+    PaintKit(44, 'Case Hardened', 'Covert', ('#3e84e6', '#e0b84c', '#7a528c'), KNIFE_IDS, 'modern'),
+    PaintKit(98, 'Ultraviolet', 'Covert', ('#6834b8', '#2a2234', '#16141a'), KNIFE_IDS, 'modern'),
+    PaintKit(40, 'Night', 'Covert', ('#2c3342', '#1d222c', '#12151c'), KNIFE_IDS, 'modern'),
+    PaintKit(735, 'Night Stripe', 'Covert', ('#3b4252', '#262b36', '#161920'), KNIFE_IDS, 'modern'),
+    PaintKit(410, 'Damascus Steel', 'Covert', ('#cfd6df', '#8a94a3', '#49505c'), KNIFE_IDS, 'modern'),
+    PaintKit(414, 'Rust Coat', 'Covert', ('#9c522c', '#6e3a20', '#3d2a20'), KNIFE_IDS, 'modern'),
+    PaintKit(43, 'Stained', 'Covert', ('#c2c8d0', '#8f96a0', '#585e68'), KNIFE_IDS, 'modern'),
+    PaintKit(42, 'Blue Steel', 'Covert', ('#607a9c', '#45546c', '#2c3442'), KNIFE_IDS, 'modern'),
+    PaintKit(175, 'Scorched', 'Covert', ('#686258', '#3e3a34', '#22201d'), KNIFE_IDS, 'modern'),
+    PaintKit(77, 'Boreal Forest', 'Covert', ('#4f6448', '#354230', '#20261e'), KNIFE_IDS, 'modern'),
+    PaintKit(5, 'Forest DDPAT', 'Covert', ('#586c48', '#3d4c32', '#262d20'), KNIFE_IDS, 'modern'),
+    PaintKit(72, 'Safari Mesh', 'Covert', ('#948a72', '#696250', '#3d3930'), KNIFE_IDS, 'modern'),
+    PaintKit(143, 'Urban Masked', 'Covert', ('#a8acb4', '#6d717a', '#353840'), KNIFE_IDS, 'modern'),
 )
 
 DEFAULT_SKIN_ENTRY = {
@@ -216,7 +328,60 @@ STARTER_LOADOUTS = {
         '61': {'paint_kit': 1142, 'seed': 0, 'wear': 0.005, 'stattrak': 250, 'custom_name': '', 'mesh_group': 'legacy'},
         '4': {'paint_kit': 1119, 'seed': 412, 'wear': 0.005, 'stattrak': -1, 'custom_name': '', 'mesh_group': 'legacy'},
     },
+    'knife gems': {
+        '507': {'paint_kit': 415, 'seed': 387, 'wear': 0.006, 'stattrak': 777, 'custom_name': 'ruby', 'mesh_group': 'modern'},
+        '515': {'paint_kit': 568, 'seed': 120, 'wear': 0.007, 'stattrak': 500, 'custom_name': 'emerald', 'mesh_group': 'modern'},
+        '508': {'paint_kit': 416, 'seed': 42, 'wear': 0.008, 'stattrak': 333, 'custom_name': 'sapphire', 'mesh_group': 'modern'},
+        '525': {'paint_kit': 44, 'seed': 403, 'wear': 0.015, 'stattrak': -1, 'custom_name': 'blue gem', 'mesh_group': 'modern'},
+        '526': {'paint_kit': 38, 'seed': 763, 'wear': 0.004, 'stattrak': -1, 'custom_name': 'full fade', 'mesh_group': 'modern'},
+    },
 }
+
+
+def is_custom_knife(definition):
+    return int(definition) in KNIFE_DEFINITIONS
+
+
+def is_knife(definition):
+    value = int(definition)
+    return value in KNIFE_DEFINITIONS or value in DEFAULT_KNIFE_DEFINITIONS
+
+
+def knife_model_path(definition):
+    value = int(definition)
+    if value in DEFAULT_KNIFE_MODELS:
+        return DEFAULT_KNIFE_MODELS[value]
+    weapon = WEAPON_BY_ID.get(value)
+    return weapon.model_path if weapon and weapon.is_knife else ''
+
+
+def utl_string_token(text):
+    """Compute Source 2 CUtlStringToken (MurmurHash2, seed 0x31415926)."""
+    data = str(text).encode('utf-8')
+    length = len(data)
+    m = 0x5BD1E995
+    h = (0x31415926 ^ length) & 0xFFFFFFFF
+    idx = 0
+    while idx + 4 <= length:
+        k = int.from_bytes(data[idx:idx + 4], 'little')
+        k = (k * m) & 0xFFFFFFFF
+        k ^= (k >> 24)
+        k = (k * m) & 0xFFFFFFFF
+        h = (h * m) & 0xFFFFFFFF
+        h ^= k
+        idx += 4
+    rem = length - idx
+    if rem == 3:
+        h ^= data[idx + 2] << 16
+    if rem >= 2:
+        h ^= data[idx + 1] << 8
+    if rem >= 1:
+        h ^= data[idx]
+        h = (h * m) & 0xFFFFFFFF
+    h ^= (h >> 13)
+    h = (h * m) & 0xFFFFFFFF
+    h ^= (h >> 15)
+    return h & 0xFFFFFFFF
 
 
 def wear_tier(wear):
@@ -231,6 +396,20 @@ def wear_tier(wear):
 def weapon_name(definition):
     weapon = WEAPON_BY_ID.get(int(definition))
     return weapon.name if weapon else f'Weapon #{int(definition)}'
+
+
+def display_weapon_name(definition):
+    value = int(definition)
+    base = weapon_name(value)
+    return f'★ {base}' if is_custom_knife(value) else base
+
+
+def validate_knife_override(value):
+    if type(value) is not int:
+        raise ValueError('knife_override must be 0 (off) or a custom CS2 knife definition ID.')
+    if value != 0 and value not in KNIFE_DEFINITIONS:
+        raise ValueError('knife_override must be 0 (off) or one of the 20 custom CS2 knives (500-526).')
+    return value
 
 
 def kits_for_weapon(definition):
@@ -306,10 +485,11 @@ def loadout_path(directory):
     return Path(directory) / '.skin-loadout.json'
 
 
-def loadout_document(enabled, skins):
+def loadout_document(enabled, skins, knife_override=0):
     if type(enabled) is not bool:
         raise ValueError('enabled must be a boolean.')
     clean = validate_skins(skins)
+    clean_knife = validate_knife_override(knife_override)
     entries = []
     for key in sorted(clean, key=int):
         item = clean[key]
@@ -322,12 +502,12 @@ def loadout_document(enabled, skins):
             'custom_name': item['custom_name'],
             'mesh_group': MESH_GROUPS[item['mesh_group']],
         })
-    return {'version': 1, 'enabled': enabled, 'entries': entries}
+    return {'version': 1, 'enabled': enabled, 'knife_override': clean_knife, 'entries': entries}
 
 
-def export_loadout(directory, enabled, skins):
+def export_loadout(directory, enabled, skins, knife_override=0):
     path = loadout_path(directory)
-    document = loadout_document(enabled, skins)
+    document = loadout_document(enabled, skins, knife_override=knife_override)
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, temp = tempfile.mkstemp(dir=path.parent, suffix='.tmp')
     try:

@@ -24,6 +24,7 @@ struct CosmeticValues {
 struct CosmeticExtras {
     std::string custom_name;
     std::uint64_t mesh_group_mask = 0; // 0 = auto/unchanged, 1 = modern, 2 = legacy
+    std::uint32_t target_definition = 0; // 0 = keep weapon's definition, or custom knife ID (500..526)
 };
 struct CosmeticPreferenceEntry {
     PhantomCosmeticPreference preference{};
@@ -44,8 +45,15 @@ struct CosmeticRunReport {
 
 bool valid_custom_name(const std::string& name);
 bool valid_mesh_group(std::uint64_t mask);
+bool is_custom_knife_definition(std::uint32_t definition);
+bool is_knife_definition(std::uint32_t definition);
+const char* knife_model_path(std::uint32_t definition);
+std::uint32_t utl_string_token(const char* text);
 bool parse_skin_loadout_json(const std::string& text, bool& enabled_out,
                              std::vector<CosmeticPreferenceEntry>& entries_out);
+bool parse_skin_loadout_json(const std::string& text, bool& enabled_out,
+                             std::vector<CosmeticPreferenceEntry>& entries_out,
+                             std::uint32_t& knife_override_out);
 
 class CosmeticAdapter {
 public:
@@ -72,9 +80,13 @@ public:
 class MemoryCosmeticAdapter final : public CosmeticAdapter {
 public:
     using MaterialRefreshFn = std::function<bool(std::uintptr_t)>;
+    // Optional in-process hook to invoke Source 2 UpdateSubclass / SetModel on knife swaps.
+    using KnifeModelRefreshFn =
+        std::function<bool(std::uintptr_t, std::uintptr_t, std::uint32_t, const char*)>;
 
     MemoryCosmeticAdapter(IProcessMemory& memory, std::uintptr_t client_base,
-                          const Profile& profile, MaterialRefreshFn material_refresh = nullptr);
+                          const Profile& profile, MaterialRefreshFn material_refresh = nullptr,
+                          KnifeModelRefreshFn knife_model_refresh = nullptr);
 
     bool enumerate_local_weapons(std::vector<CosmeticItem>& out) override;
     bool read(std::uint64_t identity, CosmeticItem& item) override;
@@ -93,6 +105,9 @@ private:
         std::vector<std::uint32_t> owned_handles;
     };
     struct OriginalMeta {
+        std::uint16_t item_definition_index = 0;
+        bool has_subclass_id = false;
+        std::uint32_t subclass_id = 0;
         std::int32_t raw_paint_kit = 0;
         std::int32_t raw_seed = 0;
         float raw_wear = 0.0f;
@@ -125,6 +140,7 @@ private:
     std::uintptr_t base_;
     Profile profile_;
     MaterialRefreshFn material_refresh_;
+    KnifeModelRefreshFn knife_model_refresh_;
     std::map<std::uint64_t, OriginalMeta> originals_;
     std::map<std::uint64_t, PendingMode> pending_;
 };
@@ -140,7 +156,8 @@ public:
     int32_t restore(CosmeticAdapter& adapter, std::uint64_t identity);
     int32_t apply_loadout(CosmeticAdapter& adapter,
                           const std::vector<CosmeticPreferenceEntry>& loadout,
-                          CosmeticRunReport& report);
+                          CosmeticRunReport& report,
+                          std::uint32_t knife_override = 0);
     int32_t restore_all(CosmeticAdapter& adapter, CosmeticRunReport& report);
     std::size_t active_count() const;
 
@@ -157,7 +174,9 @@ private:
 
 // Internal shared preference-store accessors between api.cpp and runtime.cpp.
 void snapshot_cosmetic_preferences(std::vector<CosmeticPreferenceEntry>& out);
-int32_t replace_cosmetic_preferences(const std::vector<CosmeticPreferenceEntry>& entries);
+std::uint32_t snapshot_knife_override();
+int32_t replace_cosmetic_preferences(const std::vector<CosmeticPreferenceEntry>& entries,
+                                     std::uint32_t knife_override = 0);
 void set_skin_loadout_enabled(bool enabled);
 
 } // namespace phantom

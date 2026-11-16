@@ -253,8 +253,14 @@ def main(argv=None):
         if args.export_skins:
             from native.skins import export_loadout
             config = load_config(path) if path.exists() else Config()
-            exported = export_loadout(args.config_dir, config.skin_changer, config.skins)
-            print(f'Exported local skin loadout ({len(config.skins)} weapons, enabled={config.skin_changer}) to {exported}')
+            exported = export_loadout(
+                args.config_dir,
+                config.skin_changer,
+                config.skins,
+                knife_override=config.knife_override,
+            )
+            knife_note = f', knife_override={config.knife_override}' if config.knife_override else ''
+            print(f'Exported local skin loadout ({len(config.skins)} weapons, enabled={config.skin_changer}{knife_note}) to {exported}')
             return 0
         if args.check_profile:
             profile = load_profile(args.profile)

@@ -58,10 +58,11 @@ int32_t PHANTOM_CALL phantom_runtime_load_skin_file(const char* path) {
         if (!stream.read(content.data(), length)) return PHANTOM_INTERNAL_ERROR;
 
         bool enabled = false;
+        std::uint32_t knife_override = 0;
         std::vector<phantom::CosmeticPreferenceEntry> entries;
-        if (!phantom::parse_skin_loadout_json(content, enabled, entries))
+        if (!phantom::parse_skin_loadout_json(content, enabled, entries, knife_override))
             return PHANTOM_INVALID_ARGUMENT;
-        const int32_t replaced = phantom::replace_cosmetic_preferences(entries);
+        const int32_t replaced = phantom::replace_cosmetic_preferences(entries, knife_override);
         if (replaced != PHANTOM_OK) return replaced;
         g_skin_loadout_enabled.store(enabled);
         return PHANTOM_OK;
@@ -210,7 +211,8 @@ int32_t apply_skins_win(PhantomSkinApplyReport* out) {
         } else {
             std::vector<phantom::CosmeticPreferenceEntry> loadout;
             phantom::snapshot_cosmetic_preferences(loadout);
-            status = g_skin_state.controller.apply_loadout(*adapter, loadout, run);
+            const std::uint32_t knife_override = phantom::snapshot_knife_override();
+            status = g_skin_state.controller.apply_loadout(*adapter, loadout, run, knife_override);
         }
         out->weapons_found = run.weapons_found;
         out->weapons_applied = run.weapons_applied;

@@ -10,7 +10,7 @@ import ctypes as C
 from pathlib import Path
 import sys
 
-from .skins import MAX_SKINS, MESH_GROUPS, validate_skins
+from .skins import MAX_SKINS, MESH_GROUPS, validate_knife_override, validate_skins
 
 PHANTOM_OK = 0
 PHANTOM_INVALID_ARGUMENT = 1
@@ -109,6 +109,8 @@ class SkinFoundationBridge:
         self._get_name = bind('phantom_get_cosmetic_custom_name', C.c_int32, C.c_uint32, C.c_char_p, C.c_uint32)
         self._set_mesh = bind('phantom_set_cosmetic_mesh_group', C.c_int32, C.c_uint32, C.c_uint64)
         self._get_mesh = bind('phantom_get_cosmetic_mesh_group', C.c_int32, C.c_uint32, C.POINTER(C.c_uint64))
+        self._set_knife = bind('phantom_set_knife_override', C.c_int32, C.c_uint32)
+        self._get_knife = bind('phantom_get_knife_override', C.c_int32, C.POINTER(C.c_uint32))
         self._clear = bind('phantom_clear_cosmetic_preferences', C.c_int32)
         self._runtime_available = bind('phantom_runtime_is_available', C.c_uint32)
         self._load_file = bind('phantom_runtime_load_skin_file', C.c_int32, C.c_char_p)
@@ -136,8 +138,23 @@ class SkinFoundationBridge:
             'reason': out.reason.decode('utf-8', errors='replace'),
         }
 
-    def sync_skins(self, skins):
+    def get_knife_override(self):
+        value = C.c_uint32(0)
+        code = int(self._get_knife(C.byref(value)))
+        if code != PHANTOM_OK:
+            raise RuntimeError(f'phantom_get_knife_override failed ({code}).')
+        return int(value.value)
+
+    def set_knife_override(self, knife_definition):
+        clean_knife = validate_knife_override(knife_definition)
+        code = int(self._set_knife(clean_knife))
+        if code != PHANTOM_OK:
+            raise RuntimeError(f'phantom_set_knife_override failed ({code}).')
+        return clean_knife
+
+    def sync_skins(self, skins, knife_override=0):
         clean = validate_skins(skins)
+        clean_knife = validate_knife_override(knife_override)
         if int(self._clear()) != PHANTOM_OK:
             raise RuntimeError('Could not clear C++ cosmetic store.')
         for key in sorted(clean, key=int):
@@ -160,6 +177,7 @@ class SkinFoundationBridge:
             mesh_code = int(self._set_mesh(weapon_id, MESH_GROUPS[entry['mesh_group']]))
             if mesh_code != PHANTOM_OK:
                 raise RuntimeError(f'phantom_set_cosmetic_mesh_group failed ({mesh_code}).')
+        self.set_knife_override(clean_knife)
         return len(clean)
 
     def load_skin_file(self, path):
