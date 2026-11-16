@@ -2,6 +2,7 @@ from dataclasses import asdict
 from pathlib import Path
 import queue
 import tempfile
+import threading
 import unittest
 from unittest.mock import patch
 
@@ -72,6 +73,15 @@ class GuiModelTests(unittest.TestCase):
 
 
 class SessionTests(unittest.TestCase):
+    def test_menu_visibility_controls_a_separate_pause_event(self):
+        session = RuntimeSession()
+        session.pause_event = threading.Event()
+        session.set_menu_visible(True)
+        self.assertTrue(session.pause_event.is_set())
+        session.set_menu_visible(False)
+        self.assertFalse(session.pause_event.is_set())
+        self.assertFalse(session.menu_visible)
+
     def test_no_process_poll_is_safe(self):
         session = RuntimeSession()
         self.assertFalse(session.running)

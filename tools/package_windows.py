@@ -28,7 +28,11 @@ INSTRUCTIONS = '''PHANTOM - WINDOWS X64
 1. Extract the entire ZIP into a folder. Do not run from inside the ZIP.
 2. Double-click run.cmd to open the native control panel. No Python is required.
 3. Click Start runtime in the panel when you want to attach. Stop detaches.
-4. Use borderless/windowed CS2. End stops the runtime; the panel stays open.
+4. Right Shift hides/reopens the menu. The worker pauses while the menu is open.
+5. Use borderless/windowed CS2. End stops the runtime; the panel stays open.
+6. Rebind Menu toggle in Input; save in Configs to persist it.
+
+Poppins is bundled in the EXE; no system font installation is required.
 
 Included:
   phantom-native.exe  - Windows x64 executable
@@ -88,6 +92,7 @@ def package(executable, output, revision):
         archive.write(executable, 'phantom-native.exe')
         archive.write(profile, 'offset-profile.json')
         archive.write(ROOT/'README.md', 'README.md')
+        archive.write(ROOT/'native/assets/fonts/OFL.txt', 'FONT-LICENSE.txt')
         archive.writestr('run.cmd', RUN)
         archive.writestr('RUN-ME.txt', INSTRUCTIONS)
         archive.writestr('CONFIG.example.json', json.dumps({'version': 1, 'settings': asdict(Config())}, indent=2))

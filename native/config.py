@@ -9,6 +9,8 @@ from pathlib import Path
 import re
 import tempfile
 
+from .hotkeys import keys_conflict
+
 
 @dataclass
 class Config:
@@ -36,7 +38,7 @@ class Config:
         'right_shoulder': 13, 'right_elbow': 14, 'right_hand': 15,
         'left_knee': 23, 'left_foot': 24, 'right_knee': 26, 'right_foot': 27})
     keys: dict = field(default_factory=lambda: {'aim_hold': 0x02, 'trigger_hold': 0x12,
-        'jump_hold': 0x20, 'esp_toggle': 0x75, 'aim_toggle': 0x76,
+        'jump_hold': 0x20, 'menu_toggle': 0xA1, 'esp_toggle': 0x75, 'aim_toggle': 0x76,
         'trigger_toggle': 0x77, 'radar_toggle': 0x74, 'reload': 0x78, 'save': 0x79, 'exit': 0x23})
 
 
@@ -69,13 +71,24 @@ def validate_config(document):
         raise ValueError('Bone indices must be integers in 0–255.')
     if settings['priority_bone'] not in ('head', 'neck', 'chest', 'pelvis'):
         raise ValueError('Invalid priority bone.')
+    if isinstance(settings['keys'], dict) and set(settings['keys']) == set(defaults['keys'])-{'menu_toggle'}:
+        # Upgrade old v1 configs without changing any pre-existing binding. Prefer
+        # Right Shift, but do not silently assign an already-used modifier alias.
+        keys = dict(settings['keys'])
+        if any(type(v) is not int or not 1 <= v <= 254 for v in keys.values()):
+            raise ValueError('Key bindings must be Windows virtual-key codes 1-254.')
+        candidates = (0xA1, 0x2D, 0x7B, 0x7A, 0x24)
+        available = next((vk for vk in candidates if not any(keys_conflict(vk, old) for old in keys.values())), None)
+        if available is None:
+            raise ValueError('No free menu key for this legacy config. Add a unique menu_toggle binding.')
+        settings = {**settings, 'keys': {**keys, 'menu_toggle': available}}
     if not isinstance(settings['keys'], dict) or set(settings['keys']) != set(defaults['keys']):
         raise ValueError('Expected all native key bindings.')
     if any(type(v) is not int or not 1 <= v <= 254 for v in settings['keys'].values()):
         raise ValueError('Key bindings must be Windows virtual-key codes 1–254.')
     toggles = [v for k, v in settings['keys'].items() if not k.endswith('_hold')]
-    holds = {v for k, v in settings['keys'].items() if k.endswith('_hold')}
-    if len(toggles) != len(set(toggles)) or holds.intersection(toggles):
+    holds = [v for k, v in settings['keys'].items() if k.endswith('_hold')]
+    if any(keys_conflict(a, b) for i, a in enumerate(toggles) for b in toggles[i+1:]+holds):
         raise ValueError('Toggle/action key bindings must be unique and separate from hold keys.')
     return Config(**{**settings, 'keys': dict(settings['keys']), 'bones': dict(settings['bones'])})
 

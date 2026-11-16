@@ -16,10 +16,12 @@ from PySide6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout, 
 from .gui_model import SettingsModel, SLIDERS
 from .schema import load_profile
 from .session import RuntimeSession
+from .typography import configure_fonts, ui_font
+from .hotkeys import MenuHotkey, capture_vk
 
 BG, DARK, INK, MUTED, PINK = '#272234', '#201a2b', '#c5b5f6', '#9284ac', '#fc589b'
 STYLE = '''
-QWidget { background: #272234; color: #c5b5f6; font-family: 'Segoe UI'; font-size: 13px; }
+QWidget { background: #272234; color: #c5b5f6; font-family: 'Poppins'; font-size: 13px; }
 QLabel { background: transparent; }
 QPushButton { background: transparent; border: 0; padding: 4px; }
 QPushButton:hover { color: white; }
@@ -39,6 +41,30 @@ QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
 QToolTip { color: #eee7f6; background: #201a2b; border: 1px solid #655278; }
 QPushButton:disabled { color: #82758f; }
 '''
+
+
+class IconButton(QPushButton):
+    def __init__(self, icon):
+        super().__init__()
+        self.icon = icon
+
+    def paintEvent(self, event):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        p.setPen(QPen(QColor('#f1e8ff' if self.underMouse() else MUTED), 1.4))
+        x, y = self.width()/2, self.height()/2
+        if self.icon == 'close':
+            p.drawLine(QPointF(x-3,y-3),QPointF(x+3,y+3))
+            p.drawLine(QPointF(x-3,y+3),QPointF(x+3,y-3))
+        elif self.icon == 'minimize':
+            p.drawLine(QPointF(x-4,y),QPointF(x+4,y))
+        else:
+            p.drawArc(QRectF(x-4,y-4,8,8),20*16,290*16)
+            p.drawLine(QPointF(x+4,y-4),QPointF(x+4,y))
+            p.drawLine(QPointF(x+4,y),QPointF(x,y))
+        if self.hasFocus():
+            p.setPen(QPen(QColor(INK),1,Qt.PenStyle.DotLine))
+            p.drawRect(1,1,self.width()-3,self.height()-3)
 
 
 class Toggle(QPushButton):
@@ -102,11 +128,11 @@ class FacetButton(QPushButton):
             p.setBrush(Qt.BrushStyle.NoBrush)
             p.drawRoundedRect(QRectF(1,1,self.width()-2,self.height()-2), 3, 3)
         p.setPen(QColor('#fff2ff'))
-        font = QFont('Segoe UI', 13 if self.subtitle else 9)
+        font = ui_font(13 if self.subtitle else 9)
         p.setFont(font)
         p.drawText(QRectF(0,5 if self.subtitle else 0,self.width(),25 if self.subtitle else self.height()), Qt.AlignmentFlag.AlignCenter, self.caption)
         if self.subtitle:
-            p.setPen(QColor('#dfcbe9'));p.setFont(QFont('Segoe UI', 8))
+            p.setPen(QColor('#dfcbe9'));p.setFont(ui_font(8))
             p.drawText(QRectF(0,31,self.width(),19), Qt.AlignmentFlag.AlignCenter, self.subtitle)
 
 
@@ -129,10 +155,10 @@ class Hero(QWidget):
         p.fillRect(self.rect(),gradient)
         p.setPen(Qt.PenStyle.NoPen);p.setBrush(QColor(32,26,43,220))
         p.drawRoundedRect(QRectF(self.width()-81,8,71,22),11,11)
-        p.setPen(QColor('#fff4fc'));p.setFont(QFont('Segoe UI',8))
+        p.setPen(QColor('#fff4fc'));p.setFont(ui_font(8))
         p.drawText(QRectF(self.width()-81,8,71,22),Qt.AlignmentFlag.AlignCenter,self.status)
-        p.setFont(QFont('Segoe UI',18));p.drawText(9,70,'CS2 · native workspace')
-        p.setFont(QFont('Segoe UI',9));p.drawText(10,92,self.profile)
+        p.setFont(ui_font(18));p.drawText(9,70,'CS2 · native workspace')
+        p.setFont(ui_font(9));p.drawText(10,92,self.profile)
 
 
 class SliderRow(QWidget):
@@ -151,7 +177,7 @@ class SliderRow(QWidget):
         self.precision = 10**decimals
         self.slider.setRange(round(low*self.precision),round(high*self.precision))
         self.slider.setAccessibleName(label)
-        reset = QPushButton('↺');reset.setFixedSize(24,24);reset.setToolTip('Reset '+label)
+        reset = IconButton('reset');reset.setFixedSize(24,24);reset.setToolTip('Reset '+label)
         reset.setAccessibleName('Reset '+label);reset.clicked.connect(lambda: self.reset_requested.emit(key))
         layout.addWidget(name);layout.addWidget(self.value);layout.addWidget(self.slider,1);layout.addWidget(reset)
         self.setFixedHeight(28)
@@ -179,26 +205,29 @@ class ControlPanel(QWidget):
         super().__init__()
         self.profile_path = Path(profile)
         self.model = SettingsModel(config_dir, config_name)
+        configure_fonts()
+        QApplication.instance().setFont(ui_font(10))
         self.session = RuntimeSession()
+        self.menu_hotkey = MenuHotkey()
         self.page, self.expanded = 'Aim', True
         self.drag_origin = None
         self.closing = False
         self.capture = None
         self.last_frame = 0
         self.sliders, self.toggles, self.combos, self.tab_buttons = {}, {}, {}, {}
-        self.setWindowFlags(Qt.WindowType.Window | Qt.WindowType.FramelessWindowHint)
+        self.setWindowFlags(Qt.WindowType.Window | Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint)
         self.setWindowTitle('Phantom — native control panel')
         self.setFixedWidth(440)
         self.setStyleSheet(STYLE)
-        self.setFont(QFont('Segoe UI',10))
+        self.setFont(ui_font(10))
         self.setAccessibleName('Phantom native control panel')
         outer = QVBoxLayout(self);outer.setContentsMargins(0,0,0,0);outer.setSpacing(0)
         self.titlebar = QWidget();self.titlebar.setObjectName('titlebar');self.titlebar.setStyleSheet('#titlebar { background: #201a2b; }')
         title = QHBoxLayout(self.titlebar);title.setContentsMargins(11,0,8,0);title.setSpacing(7)
         icon = QLabel('p');icon.setAlignment(Qt.AlignmentFlag.AlignCenter);icon.setFixedSize(16,16);icon.setStyleSheet('background: #ef68a7; border: 1px solid #ffa6cd; border-radius: 8px; color: white; font-size: 10px;')
-        title.addWidget(icon);title.addWidget(QLabel('Phantom v0.2.0'));title.addStretch()
-        minimize = QPushButton('−');minimize.setFixedSize(32,32);minimize.setAccessibleName('Minimize');minimize.clicked.connect(self.showMinimized)
-        close = QPushButton('×');close.setFixedSize(27,32);close.setAccessibleName('Close');close.clicked.connect(self.close)
+        title.addWidget(icon);title.addWidget(QLabel('Phantom v0.3.0'));title.addStretch()
+        minimize = IconButton('minimize');minimize.setFixedSize(32,32);minimize.setAccessibleName('Minimize');minimize.clicked.connect(self.showMinimized)
+        close = IconButton('close');close.setFixedSize(27,32);close.setAccessibleName('Close');close.clicked.connect(self.close)
         title.addWidget(minimize);title.addWidget(close);self.titlebar.setFixedHeight(36)
         self.titlebar.mousePressEvent = self.drag_start;self.titlebar.mouseMoveEvent = self.drag_move
         outer.addWidget(self.titlebar)
@@ -224,8 +253,8 @@ class ControlPanel(QWidget):
         body_layout.addLayout(tabs);outer.addWidget(body)
         morebar = QWidget();morebar.setStyleSheet('background: #201a2b;')
         morelayout = QHBoxLayout(morebar);morelayout.setContentsMargins(12,0,12,0)
-        morelayout.addSpacing(85);morelayout.addStretch();self.more = QPushButton('▾ Less');self.more.setFixedHeight(23);self.more.clicked.connect(self.toggle_more)
-        morelayout.addWidget(self.more);morelayout.addStretch();hint = QLabel('End · emergency');hint.setStyleSheet('font-size: 9px; color: #b9809d;');morelayout.addWidget(hint)
+        morelayout.addSpacing(85);morelayout.addStretch();self.more = QPushButton('Less');self.more.setFixedHeight(23);self.more.clicked.connect(self.toggle_more)
+        morelayout.addWidget(self.more);morelayout.addStretch();self.menu_hint = QLabel();self.menu_hint.setStyleSheet('font-size: 9px; color: #b9809d;');morelayout.addWidget(self.menu_hint)
         outer.addWidget(morebar)
         self.details = QWidget();self.details_layout = QVBoxLayout(self.details);self.details_layout.setContentsMargins(18,13,18,7);self.details_layout.setSpacing(5)
         self.details_scroll = QScrollArea();self.details_scroll.setWidgetResizable(True);self.details_scroll.setWidget(self.details);self.details_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -239,8 +268,39 @@ class ControlPanel(QWidget):
         self.apply_timer = QTimer(self);self.apply_timer.setSingleShot(True);self.apply_timer.setInterval(100);self.apply_timer.timeout.connect(self.apply_settings)
         self.timer = QTimer(self);self.timer.setInterval(100);self.timer.timeout.connect(self.poll_runtime);self.timer.start()
         self.capture_timer = QTimer(self);self.capture_timer.setSingleShot(True);self.capture_timer.timeout.connect(self.cancel_capture)
+        self.menu_timer = QTimer(self);self.menu_timer.setInterval(16);self.menu_timer.timeout.connect(self.poll_menu_hotkey);self.menu_timer.start()
         self.build_details();self.refresh();self.update_session_buttons()
         self.resize_panel()
+
+    def poll_menu_hotkey(self):
+        app = QApplication.instance()
+        blocked = self.closing or self.capture is not None or app.activeModalWidget() is not None or app.activePopupWidget() is not None
+        if self.menu_hotkey.poll(self.model.config.keys['menu_toggle'], blocked):
+            self.toggle_menu()
+
+    def toggle_menu(self):
+        if self.closing:
+            return
+        if self.isVisible() and not self.isMinimized():
+            self.hide()
+        else:
+            # Pause the child before displaying the menu, even if Windows declines
+            # to grant keyboard focus. No game input should run behind the panel.
+            self.session.set_menu_visible(True)
+            self.showNormal();self.raise_();self.activateWindow()
+
+    def showEvent(self,event):
+        self.session.set_menu_visible(True)
+        super().showEvent(event)
+
+    def hideEvent(self,event):
+        self.session.set_menu_visible(False)
+        super().hideEvent(event)
+
+    def changeEvent(self,event):
+        if event.type() == QEvent.Type.WindowStateChange:
+            self.session.set_menu_visible(not self.isMinimized() and self.isVisible())
+        super().changeEvent(event)
 
     def drag_start(self,event):
         if event.button() == Qt.MouseButton.LeftButton:
@@ -288,6 +348,10 @@ class ControlPanel(QWidget):
         for name,button in self.tab_buttons.items():
             button.selected = self.expanded and name == self.page;button.update()
         self.config_label.setText(self.model.name)
+        menu_key = self.model.config.keys['menu_toggle']
+        self.menu_hint.setText(self.key_name(menu_key)+' · menu')
+        if menu_key != self.menu_hotkey.key:
+            self.menu_hotkey.prime(menu_key)
         for key,button in getattr(self,'binding_buttons',{}).items():
             if self.page=='Input' and (self.capture is None or self.capture[0]!=key):
                 button.setText(self.key_name(self.model.config.keys[key]))
@@ -305,7 +369,7 @@ class ControlPanel(QWidget):
         self.expanded = not self.expanded;self.resize_panel();self.refresh()
 
     def resize_panel(self):
-        self.more.setText('▾ Less' if self.expanded else '▸ More')
+        self.more.setText('Less' if self.expanded else 'More')
         self.details_scroll.setVisible(self.expanded)
         wanted = 960 if self.expanded and self.page=='Input' else 905 if self.expanded else 558
         screen = QApplication.primaryScreen()
@@ -365,10 +429,10 @@ class ControlPanel(QWidget):
             self.section('MOVEMENT & BINDINGS')
             self.detail_toggle('Bunny hop','bunny_hop')
             self.binding_buttons={}
-            for key,label in [('aim_hold','Hold aim'),('trigger_hold','Hold trigger'),('jump_hold','Hold jump'),('esp_toggle','Toggle ESP'),('aim_toggle','Toggle aim'),('trigger_toggle','Toggle trigger'),('radar_toggle','Toggle radar'),('reload','Reload config'),('save','Save config'),('exit','Emergency exit')]:
+            for key,label in [('menu_toggle','Menu toggle'),('aim_hold','Hold aim'),('trigger_hold','Hold trigger'),('jump_hold','Hold jump'),('esp_toggle','Toggle ESP'),('aim_toggle','Toggle aim'),('trigger_toggle','Toggle trigger'),('radar_toggle','Toggle radar'),('reload','Reload config'),('save','Save config'),('exit','Emergency exit')]:
                 row=QHBoxLayout();row.addWidget(QLabel(label));row.addStretch();button=QPushButton(self.key_name(self.model.config.keys[key]));button.setFixedSize(108,23);button.setStyleSheet('background: #201a2b; border: 1px solid #655278; border-radius: 3px; font-size: 11px;');button.setAccessibleName('Bind '+label)
                 button.clicked.connect(lambda checked=False,name=key,b=button:self.begin_capture(name,b));row.addWidget(button);self.binding_buttons[key]=button;self.details_layout.addLayout(row)
-            self.note('Click a binding, then press a key or mouse button. Escape cancels. Toggle keys cannot conflict with hold keys.')
+            self.note('Click a binding, then press a key or mouse button. Right Shift opens/closes the menu by default. Escape cancels. Save in Configs to keep changes.')
         else:
             self.section('LOCAL CONFIGURATIONS')
             self.name_edit=QLineEdit(self.model.name);self.name_edit.setPlaceholderText('Configuration name');self.name_edit.setMaxLength(40);self.name_edit.setAccessibleName('Configuration name');self.details_layout.addWidget(self.name_edit)
@@ -413,7 +477,7 @@ class ControlPanel(QWidget):
 
     @staticmethod
     def key_name(vk):
-        names={1:'Mouse left',2:'Mouse right',4:'Mouse middle',0x10:'Shift',0x11:'Ctrl',0x12:'Alt',0x20:'Space',0x23:'End',0x24:'Home',0x2D:'Insert',0x2E:'Delete',0xA0:'Left Shift',0xA1:'Right Shift',0xA2:'Left Ctrl',0xA3:'Right Ctrl',0xA4:'Left Alt',0xA5:'Right Alt'}
+        names={1:'Mouse left',2:'Mouse right',4:'Mouse middle',5:'Mouse 4',6:'Mouse 5',0x10:'Shift',0x11:'Ctrl',0x12:'Alt',0x20:'Space',0x23:'End',0x24:'Home',0x2D:'Insert',0x2E:'Delete',0xA0:'Left Shift',0xA1:'Right Shift',0xA2:'Left Ctrl',0xA3:'Right Ctrl',0xA4:'Left Alt',0xA5:'Right Alt'}
         if vk in names:return names[vk]
         if 0x70<=vk<=0x7B:return 'F'+str(vk-0x6F)
         if 0x30<=vk<=0x5A:return chr(vk)
@@ -426,19 +490,18 @@ class ControlPanel(QWidget):
         if self.capture is not None:
             key,button=self.capture;button.setText(self.key_name(self.model.config.keys[key]));self.capture=None
             QApplication.instance().removeEventFilter(self);self.capture_timer.stop()
+            self.menu_hotkey.prime(self.model.config.keys['menu_toggle'])
 
     def eventFilter(self,watched,event):
         if self.capture and event.type() in (QEvent.Type.KeyPress,QEvent.Type.MouseButtonPress):
             if event.type()==QEvent.Type.KeyPress:
                 if event.key()==Qt.Key.Key_Escape:self.cancel_capture();return True
-                keymap={Qt.Key.Key_Alt:0x12,Qt.Key.Key_Shift:0x10,Qt.Key.Key_Control:0x11,Qt.Key.Key_Space:0x20,Qt.Key.Key_End:0x23,Qt.Key.Key_Home:0x24,Qt.Key.Key_Insert:0x2D,Qt.Key.Key_Delete:0x2E}
-                fallback=keymap.get(event.key(),event.key() if 0x30<=event.key()<=0x5A else 0x70+event.key()-Qt.Key.Key_F1 if Qt.Key.Key_F1<=event.key()<=Qt.Key.Key_F12 else 0)
-                code=(event.nativeVirtualKey() or fallback) if sys.platform=='win32' else fallback
-            else:code={Qt.MouseButton.LeftButton:1,Qt.MouseButton.RightButton:2,Qt.MouseButton.MiddleButton:4}.get(event.button(),0)
+                code=capture_vk(int(event.key()), int(event.nativeVirtualKey()) if sys.platform=='win32' else 0, int(event.nativeScanCode()) if sys.platform=='win32' else 0)
+            else:code={Qt.MouseButton.LeftButton:1,Qt.MouseButton.RightButton:2,Qt.MouseButton.MiddleButton:4,Qt.MouseButton.BackButton:5,Qt.MouseButton.ForwardButton:6}.get(event.button(),0)
             if not 1<=code<=254:self.message.setText('That key is not supported. Escape cancels.');return True
             key,_=self.capture
             try:
-                self.model.set_key(key,int(code));self.cancel_capture();self.apply_timer.start();self.message.setText('Binding updated; save the config to keep it.')
+                self.model.set_key(key,int(code));self.cancel_capture();self.apply_timer.start();self.message.setText('Binding updated; save in Configs to keep it.');self.refresh()
             except ValueError as error:self.message.setText(str(error))
             return True
         return super().eventFilter(watched,event)
@@ -448,7 +511,7 @@ class ControlPanel(QWidget):
             self.apply_timer.stop();self.model.save()
             self.session.start(self.profile_path,self.model.document(),self.model.path)
             self.session.update(asdict(self.model.config),self.model.revision)
-            self.hero.status='STARTING';self.runtime_label.setText('Starting');self.message.setText('Starting native runtime. Game behavior remains unverified.');self.update_session_buttons()
+            self.hero.status='STARTING';self.runtime_label.setText('Starting');self.message.setText('Runtime starts paused. Hide the menu with '+self.key_name(self.model.config.keys['menu_toggle'])+' to resume.');self.update_session_buttons()
         except (OSError,ValueError) as error:self.message.setText(str(error))
 
     def stop_runtime(self):
@@ -466,8 +529,8 @@ class ControlPanel(QWidget):
             kind=event.get('kind')
             if kind=='status':
                 message=event.get('message','');self.message.setText(message)
-                self.runtime_label.setText('Reading' if message.startswith('Live reads:') else 'Waiting' if 'Waiting' in message or 'No usable' in message else 'Running')
-                self.hero.status='RUNNING'
+                self.runtime_label.setText('Reading' if message.startswith('Live reads:') else 'Paused' if message.startswith('Paused') else 'Waiting' if 'Waiting' in message or 'No usable' in message else 'Running')
+                self.hero.status='PAUSED' if message.startswith('Paused') else 'RUNNING'
             elif kind=='frame':self.players.setText(str(event['players']));self.last_frame=time.monotonic()
             elif kind=='settings':
                 try:
@@ -484,14 +547,14 @@ class ControlPanel(QWidget):
         self.cancel_capture()
         if self.session.process is not None:
             self.closing=True;self.stop_runtime();event.ignore();return
-        self.timer.stop();self.apply_timer.stop();event.accept()
+        self.timer.stop();self.menu_timer.stop();self.apply_timer.stop();event.accept()
 
 
 def launch(profile,config_dir,config_name='default',screenshots=None):
     app=QApplication.instance() or QApplication([])
     try:
         panel=ControlPanel(profile,config_dir,config_name)
-    except (OSError,ValueError) as error:
+    except (OSError,ValueError,RuntimeError) as error:
         if screenshots is None:
             QMessageBox.critical(None,'Phantom could not open',str(error))
         return 1

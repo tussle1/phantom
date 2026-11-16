@@ -56,7 +56,7 @@ class PackageTests(unittest.TestCase):
         with zipfile.ZipFile(output) as archive:
             self.assertEqual(set(archive.namelist()), {
                 'phantom-native.exe', 'offset-profile.json', 'README.md', 'run.cmd',
-                'RUN-ME.txt', 'CONFIG.example.json', 'BUILD.json'})
+                'RUN-ME.txt', 'CONFIG.example.json', 'BUILD.json', 'FONT-LICENSE.txt'})
             self.assertIsNone(archive.testzip())
             manifest = json.loads(archive.read('BUILD.json'))
             self.assertFalse(manifest['game_behavior_verified'])

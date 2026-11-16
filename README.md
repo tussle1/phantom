@@ -18,7 +18,7 @@ py -3 phantom.py --update-offsets
 py -3 phantom.py
 ```
 
-After setup, `start-windows.cmd` opens the same native control panel on Windows. Use `--headless` to run directly without a panel. Use borderless/windowed CS2: the external overlay does not support exclusive fullscreen. After Start is clicked, its separate worker waits for `cs2.exe`; memory access failures or invalid frames suppress drawing/input instead of substituting sample data. Aim and trigger are off in newly created configs.
+After setup, `start-windows.cmd` opens the same native control panel on Windows. Use `--headless` to run directly without a panel. Use borderless/windowed CS2: the external overlay does not support exclusive fullscreen. After Start is clicked, hide the menu with **Right Shift** to let its separate worker wait for `cs2.exe`; memory access failures or invalid frames suppress drawing/input instead of substituting sample data. Aim and trigger are off in newly created configs.
 
 There is no synthetic fallback in the native runtime. The legacy preview remains in `companion.py`/`web/`, but is not imported or launched by `phantom.py`.
 
@@ -71,7 +71,32 @@ python phantom.py --gui --profile native/profiles/reference-26598758.json
 QT_QPA_PLATFORM=offscreen python phantom.py --gui --screenshot-dir artifacts/ui --profile native/profiles/reference-26598758.json
 ```
 
-The second command captures the actual control panel, not a game/overlay screenshot.
+### Font and menu key
+
+The panel bundles **Poppins Regular** (SIL Open Font License 1.1), registered as
+an application font before any UI text is painted. You do not need to install
+Poppins. Both Qt widgets and custom-painted captions use the same bundled face;
+reset, minimize and close icons are drawn as vectors rather than symbol glyphs.
+The package validates required Latin/punctuation glyphs and includes `FONT-LICENSE.txt`.
+
+**Right Shift** shows/hides the menu on Windows, even while the runtime is stopped,
+the panel is hidden, or another application has focus. Holding the key does not
+repeatedly toggle it. Minimized panels are restored. This requires the panel
+process to remain running; `--headless` has no menu. The menu stays on top when open.
+
+To customize it, open **Input → Menu toggle**, click the binding, press the new key
+or mouse button, then use **Configs → Save named config**. Escape cancels capture.
+Left and right modifiers are distinguished, and conflicting generic/side-specific
+modifier bindings are rejected. Capture and modal dialogs suppress menu toggling.
+Old version-1 configs without a menu key are upgraded in memory without changing
+existing bindings: Right Shift is preferred, then an unused fallback if necessary.
+The active binding is always displayed beside More/Less and in Input.
+
+Opening the menu pauses the worker's overlay and game input. Hide/minimize it to
+resume, still subject to the foreground-game checks. Stop and emergency exit remain
+available while paused. Closing the panel still stops its worker cleanly.
+
+The second command above captures the actual control panel, not a game/overlay screenshot.
 Starting the native worker still requires Windows. Opening the panel does not attach to CS2.
 
 ## Native implementation scope
@@ -92,10 +117,11 @@ Starting the native worker still requires Windows. Opening the panel does not at
 
 ## Controls and configurations
 
-Default bindings apply while CS2 is foreground, except **End**, which exits globally:
+Runtime bindings apply while CS2 is foreground, except **End**, which exits the worker globally. The panel's menu key works independently of the worker:
 
 | Binding | Action |
 |---|---|
+| Right Shift | Show/hide menu (rebindable in Input) |
 | F5 | Radar on/off |
 | F6 | ESP on/off |
 | F7 | Toggle aim off / the configured mode (smooth if no mode selected) |

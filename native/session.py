@@ -10,7 +10,7 @@ from .schema import load_profile
 from .config import validate_config
 
 
-def worker(profile_path, document, path, commands, events, stop):
+def worker(profile_path, document, path, commands, events, stop, pause):
     def report(event):
         try:
             events.put_nowait(event)
@@ -21,7 +21,7 @@ def worker(profile_path, document, path, commands, events, stop):
         from phantom import run
         profile = load_profile(profile_path)
         config = validate_config(document)
-        run(profile, config, path, control=commands, stop_event=stop, report=report)
+        run(profile, config, path, control=commands, stop_event=stop, report=report, pause_event=pause)
     except Exception as error:
         failed = True
         report({'kind': 'error', 'message': str(error)})
@@ -42,6 +42,8 @@ class RuntimeSession:
         self.commands = self.events = self.stop_event = None
         self.pending = None
         self.stopping_since = None
+        self.pause_event = None
+        self.menu_visible = True
 
     @property
     def running(self):
@@ -57,8 +59,11 @@ class RuntimeSession:
         self.commands = self.context.Queue(maxsize=4)
         self.events = self.context.Queue(maxsize=32)
         self.stop_event = self.context.Event()
+        self.pause_event = self.context.Event()
+        if self.menu_visible:
+            self.pause_event.set()
         self.process = self.context.Process(target=worker,
-            args=(profile_path, document, path, self.commands, self.events, self.stop_event),
+            args=(profile_path, document, path, self.commands, self.events, self.stop_event, self.pause_event),
             name='Phantom native runtime', daemon=True)
         try:
             self.process.start()
@@ -83,6 +88,11 @@ class RuntimeSession:
                 self.pending = None
             except queue.Full:
                 pass
+
+    def set_menu_visible(self, visible):
+        self.menu_visible = bool(visible)
+        if self.pause_event is not None:
+            (self.pause_event.set if self.menu_visible else self.pause_event.clear)()
 
     def stop(self):
         if self.running and self.stopping_since is None:
@@ -118,6 +128,6 @@ class RuntimeSession:
                 pipe.close()
         if self.process is not None and self.process.pid is not None:
             self.process.close()
-        self.process = self.commands = self.events = self.stop_event = None
+        self.process = self.commands = self.events = self.stop_event = self.pause_event = None
         self.pending = None
         self.stopping_since = None
