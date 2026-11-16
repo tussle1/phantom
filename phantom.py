@@ -39,6 +39,9 @@ def run(profile,config,path,control=None,stop_event=None,report=None,pause_event
         nonlocal last_status
         if message != last_status:
             print(message,flush=True)
+            if message.startswith('Attached read-only to PID'):
+                from native.startup_console import emit
+                emit('attached to process.')
             last_status = message
             if report:
                 report({'kind': 'status', 'message': message})
@@ -252,7 +255,14 @@ def main(argv=None):
             print('This does not test live game offsets, entity layout, bone mapping, or Windows APIs.')
             return 0
         if args.gui or args.screenshot_dir is not None or (sys.platform == 'win32' and not args.headless):
+            startup = None
+            if sys.platform == 'win32' and args.screenshot_dir is None:
+                from native import startup_console as startup
+                startup.initialize()
+                startup.emit('modules initialized.')
             from native.gui import launch
+            if startup is not None:
+                startup.emit('render initialized.')
             return launch(args.profile, args.config_dir, args.config, screenshots=args.screenshot_dir)
         if sys.platform != 'win32':
             raise OSError('The native runtime requires 64-bit Windows. Use --gui to preview the panel, or run config/profile tools.')
