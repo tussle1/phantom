@@ -149,6 +149,7 @@ class GuiTests(unittest.TestCase):
         checkbox = editor.style_checks['box']
         QTest.mouseClick(checkbox,Qt.MouseButton.LeftButton,pos=QPoint(8,checkbox.height()//2))
         editor.width_combo.setCurrentText('3')
+        editor.box_style_combo.setCurrentText('corner')
         editor.change_style('visible_color','#21aabb')
         self.assertTrue(self.panel.model.config.esp_style['box'])
         editor.save_config()
@@ -156,12 +157,19 @@ class GuiTests(unittest.TestCase):
         restored = SettingsModel(self.temp.name).config
         self.assertEqual(restored.esp_style['visible_color'],'#21aabb')
         self.assertEqual(restored.esp_style['line_width'],3)
+        self.assertEqual(restored.esp_style['box_style'],'corner')
         before = self.panel.model.document()
         editor.change_style('visible_color','#000000')
         self.assertEqual(self.panel.model.document(),before)
         editor.close()
         self.panel.select_page('Aim')
         self.assertEqual(self.panel.combos['priority_bone'].currentText(),'head')
+        self.panel.toggles['aim_draw_fov'].click()
+        self.assertTrue(self.panel.model.config.aim_draw_fov)
+        self.panel.combos['aim'].setCurrentText('catalyst')
+        self.panel.sliders['catalyst_smoothing'].value.setValue(7)
+        self.assertEqual(self.panel.model.config.aim,'catalyst')
+        self.assertEqual(self.panel.model.config.catalyst_smoothing,7)
 
     def test_version_is_displayed(self):
         self.assertTrue(any(label.text() == 'phantom v1.2.0' for label in self.panel.findChildren(QLabel)))

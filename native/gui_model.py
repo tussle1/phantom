@@ -12,7 +12,7 @@ SLIDERS = (
     ('Aim FOV', 'aim_fov', 1, .1, 30, 1, '°'),
     ('Smoothing', 'smooth_time', 1000, 20, 2000, 0, 'ms'),
     ('Prediction', 'prediction_ms', 1, 0, 250, 0, 'ms'),
-    ('Shot delay', 'trigger_delay_ms', 1, 20, 2000, 0, 'ms'),
+    ('Shot delay', 'trigger_delay_ms', 1, 0, 2000, 0, 'ms'),
 )
 
 

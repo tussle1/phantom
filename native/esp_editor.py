@@ -100,6 +100,9 @@ class EspEditor(QDialog):
         self.style_checks = {}
         for key,label in [('box','Bounding box'),('names','Player name'),('distance','Distance label')]:
             control = QCheckBox(label);control.toggled.connect(lambda value,key=key: self.change_style(key,value));controls.addWidget(control);self.style_checks[key] = control
+        row = QHBoxLayout();row.addWidget(QLabel('Box style'))
+        self.box_style_combo = QComboBox();self.box_style_combo.addItems(['full','corner']);self.box_style_combo.setAccessibleName('ESP box style')
+        self.box_style_combo.currentTextChanged.connect(lambda value: self.change_style('box_style',value));row.addWidget(self.box_style_combo);controls.addLayout(row)
         row = QHBoxLayout();row.addWidget(QLabel('Line width'))
         self.width_combo = QComboBox();self.width_combo.addItems(['1','2','3','4']);self.width_combo.setAccessibleName('ESP line width')
         self.width_combo.currentTextChanged.connect(lambda value: self.change_style('line_width',int(value)));row.addWidget(self.width_combo);controls.addLayout(row)
@@ -138,6 +141,7 @@ class EspEditor(QDialog):
             control.blockSignals(True);control.setChecked(getattr(config,key));control.blockSignals(False)
         for key,control in self.style_checks.items():
             control.blockSignals(True);control.setChecked(config.esp_style[key]);control.blockSignals(False)
+        self.box_style_combo.blockSignals(True);self.box_style_combo.setCurrentText(config.esp_style['box_style']);self.box_style_combo.blockSignals(False)
         self.width_combo.blockSignals(True);self.width_combo.setCurrentText(str(config.esp_style['line_width']));self.width_combo.blockSignals(False)
         for key,(button,label) in self.color_buttons.items():
             button.setText(label+' · '+config.esp_style[key])

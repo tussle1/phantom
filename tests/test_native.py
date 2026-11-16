@@ -10,6 +10,7 @@ from unittest.mock import patch
 
 import phantom
 from native.config import Config, config_path, load_config, save_config, validate_config
+from native.catalyst_aim import CatalystMovement
 from native.core import (Actor, AimController, Decoder, Frame, JumpController, ReadError,
                          TriggerController, angle_delta, angle_to, choose_target, project,
                          smooth_damp, vector)
@@ -313,6 +314,48 @@ class InputMathTests(unittest.TestCase):
         self.assertEqual(dy,0)
         self.assertLessEqual(abs(dx),250)
 
+    def test_catalyst_curve_smoothing_rounding_and_remainders(self):
+        class FixedRandom:
+            def gauss(self, mean, sigma): return mean
+            def random(self): return 1.0
+        movement = CatalystMovement(FixedRandom())
+        # No smoothing; C++ rounding is away from zero at exact half counts.
+        self.assertEqual(movement.step((.05,.05),1,.1,.1,1),(-1,1))
+        self.assertAlmostEqual(movement.error[0], .05)
+        self.assertAlmostEqual(movement.error[1], -.05)
+        self.assertEqual(movement.step((.05,.05),1,.1,.1,1),(0,0))
+        movement.reset()
+        # At ten degrees, the reference curve uses 0.3/smoothing.
+        self.assertEqual(movement.step((10.,0.),1,.1,.1,5),(0,6))
+        movement.reset()
+        # Bounded output never accumulates an enormous clipped remainder.
+        self.assertEqual(movement.step((100.,100.),1,.001,.001,1),(-250,250))
+        self.assertEqual(movement.error,[0.,0.])
+        self.assertEqual(movement.step((float('nan'),0),1,.1,.1,5),(0,0))
+        self.assertEqual(movement.step((1,0),1,0,.1,5),(0,0))
+
+    def test_catalyst_mode_uses_existing_hold_and_target_filters(self):
+        class FixedRandom:
+            def gauss(self, mean, sigma): return mean
+            def random(self): return 1.0
+        config = Config(aim='catalyst', catalyst_smoothing=1)
+        controller = AimController(FixedRandom())
+        self.assertEqual(controller.step(frame(),config,False,1/60),(0,0))
+        self.assertLess(controller.step(frame(),config,True,1/60)[0],0)
+        self.assertEqual(controller.step(replace(frame(),crosshair_pawn=None,actors=()),config,True,1/60),(0,0))
+        self.assertEqual(controller.catalyst.error,[0.,0.])
+        self.assertIsNone(controller.target)
+
+    def test_catalyst_config_migration_and_validation(self):
+        old = asdict(Config());old.pop('catalyst_smoothing')
+        loaded = validate_config({'version':1,'settings':old})
+        self.assertEqual(loaded.catalyst_smoothing,5.)
+        self.assertNotIn('catalyst_smoothing',old)
+        for value in (True, 0, 5.5, 101, float('nan')):
+            with self.subTest(value=value),self.assertRaises(ValueError):
+                validate_config({'version':1,'settings':{**old,'catalyst_smoothing':value}})
+        self.assertEqual(validate_config({'version':1,'settings':{**old,'aim':'catalyst'}}).aim,'catalyst')
+
     def test_prediction_changes_target_angle(self):
         sample = frame()
         sample = replace(sample,actors=(replace(sample.actors[0],velocity=(0,10,0)),))
@@ -329,6 +372,16 @@ class InputMathTests(unittest.TestCase):
         self.assertFalse(controller.step(sample,config,False,.4))
         self.assertFalse(controller.step(sample,config,True,.5))
         self.assertFalse(controller.step(replace(sample,crosshair_pawn=None),config,True,.8))
+
+    def test_trigger_short_delay(self):
+        config = validate_config({'version':1,'settings':{**asdict(Config()),'trigger':True,'trigger_delay_ms':10}})
+        controller = TriggerController()
+        self.assertFalse(controller.step(frame(),config,True,1.0))
+        self.assertFalse(controller.step(frame(),config,True,1.005))
+        self.assertTrue(controller.step(frame(),config,True,1.011))
+        self.assertFalse(controller.step(frame(),config,True,1.015))
+        config.trigger_delay_ms = 0
+        self.assertTrue(TriggerController().step(frame(),config,True,1.0))
 
     def test_trigger_never_targets_teammates(self):
         sample = frame()
