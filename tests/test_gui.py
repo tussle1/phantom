@@ -57,40 +57,49 @@ class GuiTests(unittest.TestCase):
     def test_version_is_displayed(self):
         self.assertTrue(any(label.text() == 'phantom v1.2.0' for label in self.panel.findChildren(QLabel)))
 
+    def wait_for_motion(self, motion):
+        # Wait for completion, not an assumed number of delivered Windows timer
+        # ticks. Loaded runners can still be one frame short after duration+50ms.
+        for _ in range(100):
+            if motion.state() == motion.State.Stopped:
+                return
+            QTest.qWait(20)
+        self.fail('GUI animation did not finish within two seconds')
+
     def test_toggle_animation_reverses_and_follows_blocked_model_refresh(self):
         from native.gui import Toggle
         toggle = Toggle(False)
         self.addCleanup(toggle.deleteLater)
         toggle.setChecked(True)
-        QTest.qWait(70)
+        toggle.motion.setCurrentTime(70)
         self.assertGreater(toggle.position, 0)
         self.assertLess(toggle.position, 1)
         toggle.setChecked(False)
-        QTest.qWait(210)
+        self.wait_for_motion(toggle.motion)
         self.assertAlmostEqual(toggle.position, 0)
         toggle.blockSignals(True)
         toggle.setChecked(True)
-        QTest.qWait(210)
+        self.wait_for_motion(toggle.motion)
         self.assertAlmostEqual(toggle.position, 1)
         self.assertTrue(toggle.isChecked())
 
     def test_hover_and_page_fades_settle_after_rapid_changes(self):
         button = self.panel.start_button
         button.animate_hover(1.0)
-        QTest.qWait(60)
+        button.hover_motion.setCurrentTime(60)
         self.assertGreater(button.hover_progress, 0)
         button.animate_hover(0.0)
-        QTest.qWait(190)
+        self.wait_for_motion(button.hover_motion)
         self.assertAlmostEqual(button.hover_progress, 0)
         for name in ('Input', 'Configs', 'Aim', 'Visuals'):
             self.panel.select_page(name)
-        QTest.qWait(230)
+        self.wait_for_motion(self.panel.page_motion)
         self.assertAlmostEqual(self.panel.details_opacity.opacity(), 1)
         self.assertEqual(self.panel.page, 'Visuals')
         self.panel.toggle_more()
         self.assertAlmostEqual(self.panel.details_opacity.opacity(), 1)
         self.panel.toggle_more()
-        QTest.qWait(230)
+        self.wait_for_motion(self.panel.page_motion)
         self.assertAlmostEqual(self.panel.details_opacity.opacity(), 1)
 
     def test_horizontal_layout_and_compact_restore(self):
