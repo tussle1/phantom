@@ -1,5 +1,11 @@
 # Phantom native
 
+<img src="native/assets/phantom-icon.png" alt="phantom ghost-p logo" width="96" height="96">
+
+The selected lavender-and-pink ghost-p logo appears in the native title bar and
+window icon. Windows builds also embed a multi-resolution executable icon.
+The full-resolution artwork is in `native/assets/phantom-logo.png`.
+
 Standalone **64-bit Windows** external runtime using `ReadProcessMemory`, a click-through GDI overlay, and foreground-gated `SendInput`. No browser, web server, injected DLL, kernel driver, or game-memory writes are used by `phantom.py`.
 
 **This is native implementation code, not a verified complete cheat suite. The Windows build pipeline passes unit tests, Win32 import/ABI checks, and packaged CLI smoke tests. The runtime has not been tested against CS2; passing these checks does not establish live compatibility.** Game updates can invalidate the profile, entity layout, and bone indices independently. Reading or automating a game can result in account bans; no anti-cheat compatibility is claimed.
