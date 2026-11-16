@@ -10,10 +10,12 @@ import re
 import tempfile
 
 from .hotkeys import keys_conflict
+from .esp_style import DEFAULT_STYLE
 
 
 @dataclass
 class Config:
+    esp_style: dict = field(default_factory=lambda: dict(DEFAULT_STYLE))
     esp: bool = True
     skeleton: bool = True
     health: bool = True
@@ -53,6 +55,8 @@ def validate_config(document):
         raise ValueError('Expected native config version 1.')
     settings = document['settings']
     defaults = asdict(Config())
+    if isinstance(settings, dict) and set(settings) == set(defaults)-{'esp_style'}:
+        settings = {**settings, 'esp_style': dict(DEFAULT_STYLE)}
     if not isinstance(settings, dict) or set(settings) != set(defaults):
         raise ValueError('Unknown or missing native setting; dashboard configs are not native configs.')
     for key, default in defaults.items():
@@ -63,6 +67,19 @@ def validate_config(document):
             lo, hi = FLOATS[key]
             if type(value) not in (int, float) or not math.isfinite(value) or not lo <= value <= hi:
                 raise ValueError(f'{key} must be between {lo} and {hi}.')
+    style = settings['esp_style']
+    if not isinstance(style, dict) or set(style) != set(DEFAULT_STYLE):
+        raise ValueError('Expected the complete ESP style.')
+    for key, default in DEFAULT_STYLE.items():
+        value = style[key]
+        if key.endswith('_color'):
+            if not isinstance(value, str) or not re.fullmatch(r'#[0-9a-fA-F]{6}', value) or value.lower() == '#000000':
+                raise ValueError('ESP colors require #rrggbb; pure black is the overlay transparency key.')
+        elif key == 'line_width':
+            if type(value) is not int or not 1 <= value <= 4:
+                raise ValueError('ESP line width must be 1–4.')
+        elif type(value) is not bool:
+            raise ValueError('ESP visibility options must be booleans.')
     if settings['aim'] not in ('off', 'hardlock', 'smooth'):
         raise ValueError('aim must be off, hardlock, or smooth. Silent aim is not implemented.')
     if not isinstance(settings['bones'], dict) or set(settings['bones']) != set(defaults['bones']):
@@ -90,7 +107,7 @@ def validate_config(document):
     holds = [v for k, v in settings['keys'].items() if k.endswith('_hold')]
     if any(keys_conflict(a, b) for i, a in enumerate(toggles) for b in toggles[i+1:]+holds):
         raise ValueError('Toggle/action key bindings must be unique and separate from hold keys.')
-    return Config(**{**settings, 'keys': dict(settings['keys']), 'bones': dict(settings['bones'])})
+    return Config(**{**settings, 'keys': dict(settings['keys']), 'bones': dict(settings['bones']), 'esp_style': dict(settings['esp_style'])})
 
 
 def config_path(directory, name):

@@ -116,6 +116,33 @@ buttons ease their hover highlight over 140 ms, and settings pages fade in over
 and settings changes are applied immediately. Rapid changes reverse/restart from
 the current visual state, and closing the panel stops active animations.
 
+### Interactive skeleton ESP designer
+
+Open **Visuals** or **Aim**, then **open skeleton ESP designer**. The separate
+native editor displays a clearly labeled sample actor, never fabricated live
+telemetry. Toggle ESP output, skeleton, health/armor bars, bounding box, names,
+and distance labels; choose line thickness (1–4) and spotted/unspotted/team,
+health and armor colors. The preview and Windows GDI player overlay consume the
+same drawing commands. The faded guide and selection dots exist only in the
+editor, even if ESP/skeleton output is disabled. Radar and spectator layout are
+not represented in this player-style preview.
+
+Click **head, neck, chest, or pelvis**, or focus the preview and press **1–4**, to
+set the existing `priority_bone`. Only these four supported targets are selectable;
+this does not enable aim assist, change bone indices, or add per-bone visibility.
+Preview sample state changes only the specimen, not teammate filtering or range.
+
+Changes use the normal live-settings pipeline. **Save current config** explicitly
+writes the active named config (replacing its previous settings); otherwise the
+editor's changes remain unsaved. GUI presets also reset the player ESP style to
+that preset's defaults. Old native configs without `esp_style` migrate in memory;
+other unknown/missing fields remain errors. Pure black is rejected as a style
+color because the external GDI overlay reserves it as its transparency key.
+
+The editor is a modal settings window, so the main menu remains visible and its
+worker stays paused until it is dismissed. This is not an in-game editor or proof
+of live CS2 compatibility.
+
 ### Built-in gameplay configuration presets
 
 Open **Configs → built-in presets**, read the description, then click **apply
@@ -220,7 +247,7 @@ Starting the native worker still requires Windows. Opening the panel does not at
 | Spectators | Resolve observer services/target handles back to the local pawn | Only actors resolvable from the sampled entity list. |
 | Configs/hotkeys | Named atomic JSON configs; configurable Windows virtual-key bindings; live reload/save | Native Qt control panel with live settings; separate from legacy browser configs. |
 
-**Not implemented:** silent aim, map parsing, per-bone visible fallback, anti-recoil, in-game GlowV2, sound ESP, bomb/defuse countdowns, grenade lineups, POV changes, no-spread, no-flash, no-smoke, third person, bullet tracers, hitmarkers, and an in-game visual-layout/bone editor. The panel edits implemented ESP preferences. Unsupported settings are rejected rather than offered as nonfunctional switches. No FliXxCZ code is included or implied.
+**Not implemented:** silent aim, map parsing, per-bone visible fallback, anti-recoil, in-game GlowV2, sound ESP, bomb/defuse countdowns, grenade lineups, POV changes, no-spread, no-flash, no-smoke, third person, bullet tracers, hitmarkers, and an in-game visual-layout/bone editor. A sample-only external ESP designer is available as described below. The panel edits implemented ESP preferences. Unsupported settings are rejected rather than offered as nonfunctional switches. No FliXxCZ code is included or implied.
 
 ## Controls and configurations
 

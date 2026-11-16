@@ -386,25 +386,28 @@ class Overlay:
             color = BLUE if actor.team == frame.local.team else GREEN if actor.spotted is True else ORANGE if actor.spotted is False else WHITE
             if config.esp:
                 bones = {key:project(value,frame.matrix,w,h) for key,value in actor.bones.items()}
-                if config.skeleton:
-                    for a,b in BONE_LINKS:
-                        if bones.get(a) and bones.get(b):
-                            self.line(dc,bones[a],bones[b],color)
-                visible_bones = [v for v in bones.values() if v is not None]
-                origin = project(actor.position,frame.matrix,w,h)
-                if visible_bones:
-                    left,right = min(p[0] for p in visible_bones)-6,max(p[0] for p in visible_bones)+6
-                    top,bottom = min(p[1] for p in visible_bones)-5,max(p[1] for p in visible_bones)+5
-                    self.text(dc,left,top-18,f'{actor.name} {meters:.0f}m',color)
-                    if config.health:
-                        self.line(dc,(left-5,top),(left-5,bottom),rgb(40,45,40),3)
-                        self.line(dc,(left-5,bottom),(left-5,bottom-(bottom-top)*actor.health/100),GREEN,3)
-                    if config.armor:
-                        self.line(dc,(left,bottom+4),(right,bottom+4),rgb(40,45,50),2)
-                        self.line(dc,(left,bottom+4),(left+(right-left)*actor.armor/100,bottom+4),BLUE,2)
-                elif origin:
-                    # No invented skeleton if this build's bone layout does not decode.
-                    self.text(dc,*origin,f'{actor.name} HP {actor.health} AR {actor.armor}',color)
+                from .esp_style import player_commands, actor_color, Line
+                commands = player_commands(bones,actor.name,meters,actor.health,actor.armor,
+                                           actor.spotted,actor.team == frame.local.team,config)
+                for command in commands:
+                    value = command.color
+                    native_color = rgb(*(int(value[i:i+2],16) for i in (1,3,5)))
+                    if isinstance(command,Line):
+                        self.line(dc,command.start,command.end,native_color,command.width)
+                    else:
+                        self.text(dc,*command.at,command.text,native_color)
+                # Keep the existing read-failure boundary: no invented skeleton.
+                if not commands and not any(point is not None for point in bones.values()):
+                    origin = project(actor.position,frame.matrix,w,h)
+                    if origin:
+                        label = ' '.join(part for part in (
+                            actor.name if config.esp_style['names'] else '',
+                            f'{meters:.0f}m' if config.esp_style['distance'] else '',
+                            f'HP {actor.health}' if config.health else '',
+                            f'AR {actor.armor}' if config.armor else '') if part)
+                        value = actor_color(config,actor.spotted,actor.team==frame.local.team)
+                        if label:
+                            self.text(dc,*origin,label,rgb(*(int(value[i:i+2],16) for i in (1,3,5))))
         if config.radar:
             self.draw_radar(dc)
         if config.spectators:
