@@ -184,5 +184,7 @@ if __name__ == '__main__':
     try:
         record(sys.argv[1] if len(sys.argv) > 1 else 'artifacts/startup-cmd.mp4')
     except Exception as error:
-        print(f'::error::{type(error).__name__}: {error}', flush=True)
+        import traceback
+        for line in traceback.format_exc().splitlines():
+            print(f'::error::{line}', flush=True)
         raise
