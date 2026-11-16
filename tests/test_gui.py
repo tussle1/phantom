@@ -45,6 +45,15 @@ class GuiTests(unittest.TestCase):
         self.assertTrue(all(metrics.inFontUcs4(ord(c)) for c in REQUIRED_TEXT))
         self.assertGreater(metrics.horizontalAdvance('Phantom - Start runtime'), 0)
 
+    def test_selected_logo_and_window_icon_are_loaded(self):
+        self.assertFalse(self.panel.logo_label.pixmap().isNull())
+        self.assertEqual(self.panel.logo_label.size().width(), 28)
+        self.assertEqual(self.panel.logo_label.pixmap().devicePixelRatio(), 2)
+        self.assertFalse(self.panel.windowIcon().isNull())
+        self.assertFalse(self.app.windowIcon().isNull())
+        self.assertFalse(self.panel.windowIcon().pixmap(16,16).isNull())
+        self.assertFalse(self.panel.windowIcon().pixmap(256,256).isNull())
+
     def test_version_is_displayed(self):
         self.assertTrue(any(label.text() == 'phantom v1.2.0' for label in self.panel.findChildren(QLabel)))
 
