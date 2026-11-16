@@ -60,6 +60,7 @@ class PackageTests(unittest.TestCase):
             self.assertIn('phantom-cpp/phantom-internal-foundation.dll', archive.namelist())
             self.assertIn('phantom-cpp/README.md', archive.namelist())
             self.assertIn('phantom-cpp/include/phantom/api.h', archive.namelist())
+            self.assertIn('phantom-cpp/include/phantom/cosmetics.h', archive.namelist())
             self.assertIn('phantom-cpp/include/phantom/runtime.h', archive.namelist())
             manifest = json.loads(archive.read('BUILD.json'))
             self.assertTrue(manifest['cpp_foundation_included'])

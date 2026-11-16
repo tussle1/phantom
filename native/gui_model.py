@@ -6,6 +6,7 @@ from pathlib import Path
 
 from .config import Config, config_path, load_config, save_config, validate_config
 from .presets import preset_config
+from .skins import STARTER_LOADOUTS, export_loadout, validate_skin_entry
 
 # label, config key, display multiplier, min, max, decimals, suffix
 SLIDERS = (
@@ -49,6 +50,37 @@ class SettingsModel:
 
     def set_aim_enabled(self, enabled):
         self.set('aim', 'smooth' if enabled and self.config.aim == 'off' else self.config.aim if enabled else 'off')
+
+    def set_skin(self, weapon_definition, entry):
+        if type(weapon_definition) is not int or not 1 <= weapon_definition <= 65535:
+            raise ValueError('Weapon definition must be an integer in 1-65535.')
+        skins = {k: dict(v) for k, v in self.config.skins.items()}
+        skins[str(weapon_definition)] = validate_skin_entry(entry)
+        self.set('skins', skins)
+
+    def remove_skin(self, weapon_definition):
+        if type(weapon_definition) is not int or not 1 <= weapon_definition <= 65535:
+            raise ValueError('Weapon definition must be an integer in 1-65535.')
+        key = str(weapon_definition)
+        if key not in self.config.skins:
+            return False
+        skins = {k: dict(v) for k, v in self.config.skins.items() if k != key}
+        self.set('skins', skins)
+        return True
+
+    def clear_skins(self):
+        if not self.config.skins:
+            return
+        self.set('skins', {})
+
+    def apply_skin_pack(self, name):
+        if name not in STARTER_LOADOUTS:
+            raise ValueError('Unknown starter skin pack.')
+        pack = {k: dict(v) for k, v in STARTER_LOADOUTS[name].items()}
+        self.set('skins', pack)
+
+    def export_skins(self):
+        return export_loadout(self.directory, self.config.skin_changer, self.config.skins)
 
     def reset(self, key):
         self.set(key, asdict(Config())[key])

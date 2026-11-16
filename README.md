@@ -91,6 +91,7 @@ not the rhythm-game autoplay controls in the reference.
 
 - **Visuals:** skeleton, health/armor bars, teammates, radar, spectators, range.
 - **Aim:** mode, priority bone, smoothing, angular FOV with an optional projected ring, speed and linear prediction. The trigger delay can be set from 0–2000 ms. The optional `catalyst` aim mode adapts the movement curve from [Catalyst](https://github.com/nul1ex/catalyst) (commit `2060cede08d8de7af9fc85c93ccb6eb0cd442e2f`) with the repository owner’s permission. It still uses Phantom’s spotted-mask target selection, not Catalyst’s hitbox, visibility, penetration, weapon-state or hitchance systems. Phantom bounds mouse events to 250 counts and does not read scoped FOV sensitivity adjustment; `Max speed` affects the other aim modes, not `catalyst`.
+- **Skins:** local client-side weapon skin loadout editor (up to 32 weapons), curated CS2 weapon/paint-kit catalog plus custom paint kit IDs, wear float and condition presets (FN/MW/FT/WW/BS), pattern seed, optional StatTrak counter, custom local nametag, model mesh mode (`auto`/`modern`/`legacy`), live Qt finish preview card, starter skin packs, and `.skin-loadout.json` export for the optional C++ foundation DLL. Local preferences only: `phantom.py` stays read-only and never alters Steam inventory ownership or other players' views.
 - **Input:** movement preference and real key/mouse binding capture; Escape cancels.
 - **Configs:** validated named save/load and an explicit offset-profile file picker.
 
@@ -316,7 +317,7 @@ cmake --build build-cpp --config Release
 ctest --test-dir build-cpp -C Release --output-on-failure
 ```
 
-The DLL exports a C ABI for bomb-timer evaluation, an experimental Windows-only in-process bomb reader, an opt-in transparent Poppins timer overlay, and inert cosmetic preferences (weapon, paint kit, seed, wear, StatTrak). Loading it alone does not read or draw anything; a host must call the runtime API explicitly. The reader uses a pinned build profile and fails closed on unreadable data, but it has only fabricated-memory coverage and has not been validated in live CS2. Cosmetic preferences are stored locally but not applied, written, refreshed, or rendered; `phantom_apply_cosmetics()` still returns `PHANTOM_NOT_INTEGRATED`. There is no injector, anti-cheat bypass, or inventory ownership change. See [cpp/README.md](cpp/README.md) and never treat CI checks as CS2 compatibility proof.
+The DLL exports a C ABI for bomb-timer evaluation, an experimental Windows-only in-process bomb reader, an opt-in transparent Poppins timer overlay, and an experimental local-only skin changer (`MemoryCosmeticAdapter` + `CosmeticController` + `phantom_runtime_*_skin*`). Loading the DLL alone does not read, write, or draw anything; a host must call the runtime API explicitly. Both readers/adapters use the pinned `a2x/cs2-dumper` build profile and fail closed on unreadable data, recycled handles, or non-local weapons (`phantom_apply_cosmetics()` returns `PHANTOM_NOT_INTEGRATED` outside CS2). Coverage is fabricated-memory only and has not been validated in live CS2. There is no DLL injector, anti-cheat bypass, or inventory ownership change. Use `phantom.py --export-skins` or **Skins → Sync `.skin-loadout.json`** to export local loadouts for the C++ foundation. See [cpp/README.md](cpp/README.md) and never treat CI checks as CS2 compatibility proof.
 
 ## Tests
 
@@ -336,5 +337,5 @@ captures its compact/expanded control panel, then uploads a
 The ZIP contains the EXE, pinned reference profile, a `run.cmd` launcher,
 configuration example, instructions, actual control-panel screenshots, `phantom-cpp/` (the tested C++ foundation DLL, header and status document), and a source revision/EXE/DLL SHA-256 manifest.
 Extract the complete ZIP and double-click `run.cmd`; Python is not required.
-The DLL includes an experimental bomb-timer runtime adapter, but it is not live-game validated and does not include a working skin override.
+The DLL includes experimental opt-in bomb-timer and local skin-changer runtime adapters, neither of which is live-game validated.
 A successful package build is not a live-game compatibility test.

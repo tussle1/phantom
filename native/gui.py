@@ -23,6 +23,7 @@ from .version import __version__
 from . import appearance
 from .presets import PRESETS, preset_filename
 from .esp_editor import EspEditor
+from .skin_panel import SkinPanel
 
 BG, DARK, INK, MUTED, PINK = '#272234', '#201a2b', '#c5b5f6', '#9284ac', '#fc589b'
 STYLE = '''
@@ -31,8 +32,9 @@ QLabel { background: transparent; }
 QPushButton { background: transparent; border: 0; padding: 4px; }
 QPushButton:hover { color: white; }
 QPushButton:focus { border: 1px solid #b49bf4; border-radius: 3px; }
-QLineEdit, QComboBox { background: #201a2b; color: #e6ddef; border: 1px solid #655278; border-radius: 3px; padding: 4px 7px; }
-QLineEdit:focus, QComboBox:focus { border-color: #b49bf4; }
+QLineEdit, QComboBox, QSpinBox, QListWidget { background: #201a2b; color: #e6ddef; border: 1px solid #655278; border-radius: 3px; padding: 4px 7px; }
+QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QListWidget:focus { border-color: #b49bf4; }
+QListWidget::item:selected { background: #7150a2; color: #eee7f6; }
 QComboBox::drop-down { border: 0; width: 20px; }
 QComboBox QAbstractItemView { background: #272234; color: #e6ddef; selection-background-color: #7150a2; }
 QDoubleSpinBox { background: transparent; color: #eee7f6; border: 0; padding: 0; font-size: 12px; }
@@ -284,6 +286,8 @@ class ControlPanel(QWidget):
         self.closing = False
         self.capture = None
         self.last_frame = 0
+        self.skin_panel = None
+        self.selected_skin_weapon = 7
         self.sliders, self.toggles, self.combos, self.tab_buttons = {}, {}, {}, {}
         self.setWindowFlags(Qt.WindowType.Window | Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint)
         self.setWindowTitle('phantom — native control panel')
@@ -338,7 +342,7 @@ class ControlPanel(QWidget):
         self.add_summary(body_layout,'Runtime',self.runtime_label,'Trigger','trigger')
         body_layout.addSpacing(11)
         tabs = QHBoxLayout();tabs.setSpacing(5)
-        subtitles = {'Visuals':'Skeleton\nRadar · teams','Aim':'Priority bone\nSmoothing','Input':'Keybinds\nMovement','Configs':'Save · load\nProfiles'}
+        subtitles = {'Visuals':'Skeleton\nRadar · teams','Aim':'Priority bone\nSmoothing','Skins':'Weapons\nLoadouts','Input':'Keybinds\nMovement','Configs':'Save · load\nProfiles'}
         for i, label in enumerate(subtitles):
             column = QVBoxLayout();column.setSpacing(0)
             button = FacetButton(label,color='#9562cd',seed=10+i);button.setFixedHeight(25);button.setMinimumHeight(25)
@@ -405,6 +409,8 @@ class ControlPanel(QWidget):
         self.hero.setFixedHeight(88 if compact else 104)
         for row in self.findChildren(SliderRow):
             row.setFixedHeight(24 if compact else 28)
+        if self.skin_panel is not None:
+            self.skin_panel.apply_theme()
 
     def preview_appearance(self, key, value):
         setattr(self.appearance, key, value)
@@ -563,6 +569,8 @@ class ControlPanel(QWidget):
         self.hero.update()
         if hasattr(self, 'esp_editor'):
             self.esp_editor.refresh()
+        if self.skin_panel is not None:
+            self.skin_panel.refresh_from_model()
 
     def fade_details(self):
         self.page_motion.stop()
@@ -601,20 +609,31 @@ class ControlPanel(QWidget):
     def clear_details(self):
         self.cancel_capture()
         self.binding_buttons = {}
+        self.skin_panel = None
         # Top-level controls survive; detail controls are rebuilt on tab changes.
         self.sliders = {key:value for key,value in self.sliders.items() if key in {spec[1] for spec in SLIDERS}}
         self.toggles = {key:value for key,value in self.toggles.items() if key in ('esp','aim','trigger')}
         self.combos.clear()
         while self.details_layout.count():
             item = self.details_layout.takeAt(0)
-            if item.widget():item.widget().deleteLater()
-            elif item.layout():self.delete_layout(item.layout())
+            if item.widget():
+                widget = item.widget()
+                widget.hide()
+                widget.setParent(None)
+                widget.deleteLater()
+            elif item.layout():
+                self.delete_layout(item.layout())
 
     def delete_layout(self,layout):
         while layout.count():
             item=layout.takeAt(0)
-            if item.widget():item.widget().deleteLater()
-            elif item.layout():self.delete_layout(item.layout())
+            if item.widget():
+                widget = item.widget()
+                widget.hide()
+                widget.setParent(None)
+                widget.deleteLater()
+            elif item.layout():
+                self.delete_layout(item.layout())
 
     def section(self,text):
         label=QLabel(text);label.setStyleSheet('font-size: 11px; color: #d4c4f9; letter-spacing: .5px;');label.setFixedHeight(23);self.details_layout.addWidget(label)
@@ -665,6 +684,9 @@ class ControlPanel(QWidget):
                 self.detail_toggle(label,key)
             self.add_slider(self.details_layout,'Range','max_distance_m',1,1,1000,0,'m')
             self.note('An external overlay, not in-game glow. Colors indicate the local spotted mask; they do not prove line of sight.')
+        elif self.page=='Skins':
+            self.skin_panel = SkinPanel(self, Toggle)
+            self.details_layout.addWidget(self.skin_panel)
         elif self.page=='Input':
             self.section('MOVEMENT & BINDINGS')
             self.detail_toggle('Bunny hop','bunny_hop')
@@ -696,6 +718,11 @@ class ControlPanel(QWidget):
             self.note('Profile checks validate file structure, not live game compatibility. No offsets are downloaded silently.')
         self.details_layout.addStretch()
         self.apply_appearance()
+        self.details_layout.activate()
+        self.details.updateGeometry()
+        viewport = self.details_scroll.viewport().size()
+        self.details.resize(max(1, viewport.width()), max(viewport.height(), self.details.sizeHint().height()))
+        QApplication.sendEvent(self.details, QEvent(QEvent.Type.LayoutRequest))
 
     def apply_selected_preset(self):
         if self.session.process is not None:
