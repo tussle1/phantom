@@ -50,6 +50,22 @@ class PackageTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             package(self.exe, self.directory/'test.zip', 'main')
 
+    def test_foundation_dll_is_included_and_hashed(self):
+        dll = self.directory/'fixture-foundation.dll'
+        dll.write_bytes(self.exe.read_bytes())
+        output = self.directory/'test.zip'
+        with redirect_stdout(io.StringIO()):
+            package(self.exe, output, 'a'*40, dll)
+        with zipfile.ZipFile(output) as archive:
+            self.assertIn('phantom-cpp/phantom-internal-foundation.dll', archive.namelist())
+            self.assertIn('phantom-cpp/README.md', archive.namelist())
+            self.assertIn('phantom-cpp/include/phantom/api.h', archive.namelist())
+            self.assertIn('phantom-cpp/include/phantom/runtime.h', archive.namelist())
+            manifest = json.loads(archive.read('BUILD.json'))
+            self.assertTrue(manifest['cpp_foundation_included'])
+            self.assertEqual(manifest['cpp_foundation_sha256'],
+                             hashlib.sha256(archive.read('phantom-cpp/phantom-internal-foundation.dll')).hexdigest())
+
     def test_contents_and_executable_digest(self):
         output = self.directory/'test.zip'
         with redirect_stdout(io.StringIO()):

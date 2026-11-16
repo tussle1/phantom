@@ -51,6 +51,7 @@ Included:
   CONFIG.example.json - Reference only; runtime creates a separate default config
   README.md           - Full implementation status and limitations
   BUILD.json          - Source revision and executable SHA-256
+  phantom-cpp/        - Tested C++ foundation DLL and headers (not live hooks)
 
 Aim and trigger are disabled in new configs. F6 ESP, F7 aim, F8 trigger,
 F9 reload config, F10 save config. Right mouse holds aim; left Alt holds
@@ -63,7 +64,9 @@ profile with a newly pinned GitHub dump, open a terminal in this folder and run:
 
 The bundled offsets are a reference, not proof of current game compatibility.
 The build checks packaging, API imports, unit tests, CLI tools and offscreen GUI rendering.
-It does NOT test actual CS2 behavior, overlay rendering, live memory offsets,
+phantom-cpp contains an x64 C++ foundation tested WITHOUT CS2. It has no
+injection, game hooks, live bomb reads, rendering, or cosmetic application.
+It does NOT provide working skins or bomb timers by itself. It does NOT test actual CS2 behavior, overlay rendering, live memory offsets,
 or whether the game accepts synthetic input. This is not the full requested
 feature suite. See README.md for the exact implementation scope.
 Game memory reads/input automation can result in account bans. No anti-cheat
@@ -86,16 +89,27 @@ def check_pe(executable):
             raise ValueError('Expected an AMD64 PE32+ executable.')
 
 
-def package(executable, output, revision):
+def package(executable, output, revision, foundation_dll=None):
     executable, output = Path(executable), Path(output)
     if not re.fullmatch(r'[a-f0-9]{40}', revision):
         raise ValueError('An exact source commit SHA is required for BUILD.json.')
     check_pe(executable)
+    dll = None
+    if foundation_dll is not None:
+        dll = Path(foundation_dll)
+        if not dll.is_file():
+            raise ValueError(f'C++ foundation DLL does not exist: {dll}')
+        check_pe(dll)
     profile = ROOT/'native/profiles/reference-26598758.json'
     load_profile(profile)
     digest = hashlib.sha256(executable.read_bytes()).hexdigest()
+    dll_digest = None
+    if dll is not None:
+        dll_digest = hashlib.sha256(dll.read_bytes()).hexdigest()
     manifest = {'app_version': __version__, 'source_commit': revision, 'platform': 'windows-x64',
-                'executable_sha256': digest, 'game_behavior_verified': False}
+                'executable_sha256': digest, 'game_behavior_verified': False,
+                'cpp_foundation_included': dll is not None,
+                'cpp_foundation_sha256': dll_digest}
     output.parent.mkdir(parents=True, exist_ok=True)
     # All names are fixed, relative paths. No checkout, secrets, or caches enter the ZIP.
     with zipfile.ZipFile(output, 'w', compression=zipfile.ZIP_DEFLATED, compresslevel=6) as archive:
@@ -107,6 +121,11 @@ def package(executable, output, revision):
         archive.writestr('RUN-ME.txt', INSTRUCTIONS)
         archive.writestr('CONFIG.example.json', json.dumps({'version': 1, 'settings': asdict(Config())}, indent=2))
         archive.writestr('BUILD.json', json.dumps(manifest, indent=2))
+        if dll is not None:
+            archive.write(dll, 'phantom-cpp/phantom-internal-foundation.dll')
+            archive.write(ROOT/'cpp/README.md', 'phantom-cpp/README.md')
+            archive.write(ROOT/'cpp/include/phantom/api.h', 'phantom-cpp/include/phantom/api.h')
+            archive.write(ROOT/'cpp/include/phantom/runtime.h', 'phantom-cpp/include/phantom/runtime.h')
         for name in PRESETS:
             archive.writestr('presets/'+preset_filename(name), json.dumps(preset_document(name), indent=2))
     print(f'Packaged {output} ({output.stat().st_size:,} bytes); EXE SHA-256 {digest}')
@@ -118,8 +137,9 @@ def main():
     parser.add_argument('--exe', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--revision', required=True)
+    parser.add_argument('--foundation-dll', type=Path)
     args = parser.parse_args()
-    package(args.exe, args.output, args.revision)
+    package(args.exe, args.output, args.revision, args.foundation_dll)
 
 
 if __name__ == '__main__':

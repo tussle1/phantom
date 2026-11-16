@@ -7,6 +7,7 @@ on:
       - 'requirements-gui.txt'
       - 'tools/package_windows.py'
       - 'tests/**'
+      - 'cpp/**'
       - 'README.md'
       - '.github/workflows/windows-package.yml'
   workflow_dispatch:
@@ -29,6 +30,22 @@ jobs:
         run: python tools/run_tests.py
       - name: Verify Windows API imports and INPUT ABI
         run: python -c "import ctypes; from native import windows; assert ctypes.sizeof(windows.INPUT) == 40"
+      - name: Build and smoke-test C++ foundation
+        shell: pwsh
+        run: |
+          cmake -S cpp -B build-cpp -A x64 2>&1 | Tee-Object -FilePath cpp-build.log
+          if ($LASTEXITCODE -ne 0) { Write-Output "::error::CMake configure failed"; exit $LASTEXITCODE }
+          cmake --build build-cpp --config Release 2>&1 | Tee-Object -FilePath cpp-build.log -Append
+          if ($LASTEXITCODE -ne 0) { Get-Content cpp-build.log | Select-Object -Last 20 | ForEach-Object { Write-Output "::error::$_" }; exit $LASTEXITCODE }
+          ctest --test-dir build-cpp -C Release --output-on-failure 2>&1 | Tee-Object -FilePath cpp-build.log -Append
+          if ($LASTEXITCODE -ne 0) { Get-Content cpp-build.log | Select-Object -Last 30 | ForEach-Object { Write-Output "::error::$_" }; exit $LASTEXITCODE }
+      - name: Upload C++ failure log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cpp-build-log-windows-package
+          path: cpp-build.log
+          if-no-files-found: ignore
       - name: Install packager
         run: python -m pip install pyinstaller==6.16.0
       - name: Build executable
@@ -48,11 +65,17 @@ jobs:
       - name: Create ZIP with executable, profile, and instructions
         shell: pwsh
         run: |
-          python tools/package_windows.py --exe dist/phantom-native.exe --output artifacts/phantom-windows-x64.zip --revision ${{ github.sha }}
+          $dll = (Get-ChildItem build-cpp -Recurse -Filter phantom-internal-foundation.dll | Select-Object -First 1).FullName
+          if (!$dll) { throw 'C++ foundation DLL was not built' }
+          python tools/package_windows.py --exe dist/phantom-native.exe --output artifacts/phantom-windows-x64.zip --revision ${{ github.sha }} --foundation-dll $dll
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Expand-Archive -Path artifacts/phantom-windows-x64.zip -DestinationPath artifacts/windows-package
           Copy-Item artifacts/ui/*.png artifacts/windows-package/
           $manifest = Get-Content artifacts/windows-package/BUILD.json | ConvertFrom-Json
+          $dllPath = Join-Path artifacts/windows-package 'phantom-cpp/phantom-internal-foundation.dll'
+          if (!(Test-Path $dllPath)) { throw 'Packaged C++ foundation DLL missing' }
+          $dllHash = (Get-FileHash $dllPath -Algorithm SHA256).Hash.ToLower()
+          if ($dllHash -ne $manifest.cpp_foundation_sha256) { throw 'Packaged C++ DLL checksum mismatch' }
           $actual = (Get-FileHash artifacts/windows-package/phantom-native.exe -Algorithm SHA256).Hash.ToLower()
           if ($actual -ne $manifest.executable_sha256) { throw 'Packaged EXE checksum mismatch' }
       - uses: actions/upload-artifact@v4

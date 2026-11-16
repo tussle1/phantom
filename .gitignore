@@ -10,6 +10,7 @@ test-results/
 # Native runtime artifacts
 dist/
 build/
+build-cpp/
 *.spec
 .offsets/
 .native-configs/
