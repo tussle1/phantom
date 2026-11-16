@@ -34,7 +34,18 @@ jobs:
         if: runner.os == 'Windows'
         run: python -c "import ctypes; from native import windows; assert ctypes.sizeof(windows.INPUT) == 40"
       - name: Build and test C++ foundation
+        shell: pwsh
         run: |
-          cmake -S cpp -B build-cpp -DCMAKE_BUILD_TYPE=Release
-          cmake --build build-cpp --config Release
-          ctest --test-dir build-cpp -C Release --output-on-failure
+          cmake -S cpp -B build-cpp -DCMAKE_BUILD_TYPE=Release 2>&1 | Tee-Object -FilePath cpp-build.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cmake --build build-cpp --config Release 2>&1 | Tee-Object -FilePath cpp-build.log -Append
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          ctest --test-dir build-cpp -C Release --output-on-failure 2>&1 | Tee-Object -FilePath cpp-build.log -Append
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Upload C++ failure log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cpp-build-log-${{ runner.os }}
+          path: cpp-build.log
+          if-no-files-found: ignore
