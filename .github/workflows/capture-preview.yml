@@ -2,7 +2,7 @@ name: Capture GUI screenshots
 on:
   push:
     branches: ['arena/aa78817e-phantom']
-    paths: ['.github/workflows/capture-preview.yml', 'tests/test_gui.py']
+    paths: ['.github/workflows/capture-preview.yml', 'tests/test_gui.py', 'native/gui.py']
 permissions:
   contents: write
 jobs:

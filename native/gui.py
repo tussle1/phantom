@@ -149,7 +149,11 @@ class Hero(QWidget):
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         p.fillRect(self.rect(), QColor('#57425f'))
         if not self.image.isNull():
-            p.drawPixmap(self.rect(), self.image)
+            # The reference banner includes a baked-in uppercase status badge.
+            # Crop it out; only the live, lowercase status above is rendered.
+            source = self.image.rect()
+            source.setWidth(round(source.width()*.80))
+            p.drawPixmap(self.rect(), self.image, source)
         gradient = QLinearGradient(0,0,0,self.height())
         gradient.setColorAt(0,QColor(20,12,28,15));gradient.setColorAt(.4,QColor(20,12,28,30));gradient.setColorAt(1,QColor(20,12,28,210))
         p.fillRect(self.rect(),gradient)
