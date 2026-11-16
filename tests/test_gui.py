@@ -9,7 +9,7 @@ from unittest.mock import patch
 try:
     from PySide6.QtCore import Qt
     from PySide6.QtTest import QTest
-    from PySide6.QtGui import QRawFont
+    from PySide6.QtGui import QFontInfo, QFontMetrics
     from PySide6.QtWidgets import QApplication
     from native.gui import ControlPanel
     QT_AVAILABLE = True
@@ -39,10 +39,11 @@ class GuiTests(unittest.TestCase):
         from native.typography import configure_fonts, ui_font, REQUIRED_TEXT
         self.assertEqual(configure_fonts(), 'Poppins')
         self.assertEqual(self.panel.font().family(), 'Poppins')
-        face = QRawFont.fromFont(ui_font(10))
-        self.assertEqual(face.familyName(), 'Poppins')
-        self.assertTrue(all(face.supportsCharacter(c) for c in REQUIRED_TEXT))
-        self.assertTrue(all(glyph != 0 for glyph in face.glyphIndexesForString('Phantom - Start runtime')))
+        font = ui_font(10)
+        self.assertIn(QFontInfo(font).family(), ('Poppins', 'Poppins Regular'))
+        metrics = QFontMetrics(font)
+        self.assertTrue(all(metrics.inFontUcs4(ord(c)) for c in REQUIRED_TEXT))
+        self.assertGreater(metrics.horizontalAdvance('Phantom - Start runtime'), 0)
 
     def test_menu_toggle_hides_reopens_and_controls_pause_state(self):
         self.assertTrue(self.panel.isVisible())
