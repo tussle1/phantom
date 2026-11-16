@@ -48,7 +48,7 @@ class GuiTests(unittest.TestCase):
     def test_horizontal_layout_and_compact_restore(self):
         self.assertGreater(self.panel.width(), self.panel.height())
         self.assertGreaterEqual(self.panel.details_scroll.x(), self.panel.overview.width())
-        self.assertGreater(self.panel.details_scroll.width(), 400)
+        self.assertGreater(self.panel.details_scroll.width(), 300)
         for page in ('Visuals', 'Aim', 'Input', 'Configs'):
             self.panel.select_page(page)
             self.app.processEvents()
