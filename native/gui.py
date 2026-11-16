@@ -386,13 +386,17 @@ class ControlPanel(QWidget):
             '#7150a2': 'accent', '#7145a1': 'accent', '#382b49': 'surface', '#4b3c67': 'surface',
         }
         def themed(style):
-            return re.sub(r'#[0-9a-fA-F]{6}', lambda match: colors[roles[match[0].lower()]] if match[0].lower() in roles else match[0], style)
+            result = re.sub(r'#[0-9a-fA-F]{6}', lambda match: colors[roles[match[0].lower()]] if match[0].lower() in roles else match[0], style)
+            return result.replace('color: white', 'color: '+colors['ink'])
         # Keep pristine inline styles so successive previews never compound.
         for widget in [self]+self.findChildren(QWidget):
             if not hasattr(widget, '_original_style'):
                 widget._original_style = widget.styleSheet()
-            widget.setStyleSheet(themed(widget._original_style))
-            widget.update()
+            style = themed(widget._original_style)
+            if widget.styleSheet() != style:
+                widget.setStyleSheet(style)
+            # Item views overload update(QModelIndex); call QWidget explicitly.
+            QWidget.update(widget)
         compact = self.appearance.spacing == 'compact'
         self.details_layout.setSpacing(2 if compact else 5)
         self.details_layout.setContentsMargins(*((12,8,12,5) if compact else (18,13,18,7)))
