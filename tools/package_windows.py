@@ -26,8 +26,9 @@ exit /b %RESULT%\r
 INSTRUCTIONS = '''PHANTOM - WINDOWS X64
 
 1. Extract the entire ZIP into a folder. Do not run from inside the ZIP.
-2. Double-click run.cmd. No Python installation is required.
-3. Use borderless/windowed CS2. End exits the runtime.
+2. Double-click run.cmd to open the native control panel. No Python is required.
+3. Click Start runtime in the panel when you want to attach. Stop detaches.
+4. Use borderless/windowed CS2. End stops the runtime; the panel stays open.
 
 Included:
   phantom-native.exe  - Windows x64 executable
@@ -47,7 +48,7 @@ profile with a newly pinned GitHub dump, open a terminal in this folder and run:
   phantom-native.exe --update-offsets --profile offset-profile.json
 
 The bundled offsets are a reference, not proof of current game compatibility.
-The build checks packaging, API imports, unit tests, --help and --check-profile.
+The build checks packaging, API imports, unit tests, CLI tools and offscreen GUI rendering.
 It does NOT test actual CS2 behavior, overlay rendering, live memory offsets,
 or whether the game accepts synthetic input. This is not the full requested
 feature suite. See README.md for the exact implementation scope.
