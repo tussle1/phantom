@@ -223,7 +223,7 @@ class GuiTests(unittest.TestCase):
         self.assertGreater(self.panel.width(), self.panel.height())
         self.assertGreaterEqual(self.panel.details_scroll.x(), self.panel.overview.width())
         self.assertGreater(self.panel.details_scroll.width(), 300)
-        for page in ('Visuals', 'Aim', 'Input', 'Configs', 'Appearance'):
+        for page in ('Visuals', 'Aim', 'Skins', 'Input', 'Configs', 'Appearance'):
             self.panel.select_page(page)
             self.app.processEvents()
             self.assertGreater(self.panel.width(), self.panel.height())
@@ -237,7 +237,7 @@ class GuiTests(unittest.TestCase):
     def test_lowercase_is_presentation_only(self):
         from native.typography import ui_font
         self.assertEqual(ui_font(10).capitalization(), QFont.Capitalization.AllLowercase)
-        for page in ('Visuals', 'Aim', 'Input', 'Configs', 'Appearance'):
+        for page in ('Visuals', 'Aim', 'Skins', 'Input', 'Configs', 'Appearance'):
             self.panel.select_page(page)
             self.app.processEvents()
             for widget in self.panel.findChildren(QLabel) + self.panel.findChildren(QPushButton):
@@ -297,12 +297,62 @@ class GuiTests(unittest.TestCase):
         QTest.mouseClick(self.panel.more, Qt.MouseButton.LeftButton)
         self.assertFalse(self.panel.expanded)
         self.assertTrue(self.panel.details_scroll.isHidden())
-        for name in ('Visuals', 'Input', 'Configs', 'Aim'):
+        for name in ('Visuals', 'Skins', 'Input', 'Configs', 'Aim'):
             QTest.mouseClick(self.panel.tab_buttons[name], Qt.MouseButton.LeftButton)
             self.app.processEvents()
             self.assertTrue(self.panel.expanded)
             self.assertEqual(self.panel.page, name)
             self.assertFalse(self.panel.details_scroll.isHidden())
+
+    def test_local_skin_changer_tab_workflow(self):
+        import json
+        from native.skins import loadout_path
+        self.panel.select_page('Skins')
+        self.app.processEvents()
+        sp = self.panel.skin_panel
+        self.assertIsNotNone(sp)
+        self.assertFalse(self.panel.model.config.skin_changer)
+        QTest.mouseClick(sp.enable_toggle, Qt.MouseButton.LeftButton)
+        self.assertTrue(self.panel.model.config.skin_changer)
+        # Select AK-47 Redline, FN wear button, StatTrak, nametag, legacy mesh, then apply.
+        sp.kit_spin.setValue(282)
+        QTest.mouseClick(sp.wear_buttons['FT'], Qt.MouseButton.LeftButton)
+        sp.seed_spin.setValue(420)
+        QTest.mouseClick(sp.stattrak_toggle, Qt.MouseButton.LeftButton)
+        sp.stattrak_spin.setValue(1337)
+        sp.name_edit.setText('phantom ak')
+        sp.mesh_combo.setCurrentText('legacy')
+        QTest.mouseClick(sp.apply_weapon_button, Qt.MouseButton.LeftButton)
+        self.assertIn('7', self.panel.model.config.skins)
+        saved_ak = self.panel.model.config.skins['7']
+        self.assertEqual(saved_ak['paint_kit'], 282)
+        self.assertEqual(saved_ak['seed'], 420)
+        self.assertEqual(saved_ak['stattrak'], 1337)
+        self.assertEqual(saved_ak['custom_name'], 'phantom ak')
+        self.assertEqual(saved_ak['mesh_group'], 'legacy')
+        self.assertEqual(sp.loadout_list.count(), 1)
+        # Sync .skin-loadout.json without polluting named configs.
+        QTest.mouseClick(sp.export_button, Qt.MouseButton.LeftButton)
+        exported = loadout_path(self.temp.name)
+        self.assertTrue(exported.is_file())
+        self.assertEqual(self.panel.model.names(), [])
+        doc = json.loads(exported.read_text(encoding='utf-8'))
+        self.assertTrue(doc['enabled'])
+        self.assertEqual(doc['entries'][0]['paint_kit'], 282)
+        # Load starter pack, remove one weapon, then clear all.
+        sp.pack_combo.setCurrentText('phantom neon')
+        QTest.mouseClick(sp.load_pack_button, Qt.MouseButton.LeftButton)
+        self.assertGreater(sp.loadout_list.count(), 1)
+        QTest.mouseClick(sp.remove_weapon_button, Qt.MouseButton.LeftButton)
+        self.assertNotIn('7', self.panel.model.config.skins)
+        QTest.mouseClick(sp.clear_all_button, Qt.MouseButton.LeftButton)
+        self.assertEqual(self.panel.model.config.skins, {})
+        self.assertEqual(sp.loadout_list.count(), 0)
+        # Switch away and refresh to ensure no stale widget references.
+        self.panel.select_page('Aim')
+        self.app.processEvents()
+        self.assertIsNone(self.panel.skin_panel)
+        self.panel.refresh()
 
     def test_visual_controls(self):
         self.panel.select_page('Visuals')

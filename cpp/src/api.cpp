@@ -1,17 +1,22 @@
 #include "phantom/api.h"
+#include "phantom/cosmetics.h"
+#include "phantom/runtime.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstring>
 #include <mutex>
+#include <string>
+#include <vector>
 
 namespace {
 constexpr uint32_t abi = 1;
 constexpr double stale_after = 0.5;
 constexpr double estimate_margin = 0.1;
+
 struct Store {
     std::mutex mutex;
-    std::array<PhantomCosmeticPreference, 32> entries{};
+    std::array<phantom::CosmeticPreferenceEntry, 32> entries{};
 };
 Store& preferences() {
     // Construct only on an explicit API call, not under the DLL loader lock.
@@ -21,7 +26,43 @@ Store& preferences() {
 template<class T> bool sized(const T* value) {
     return value && value->struct_size == sizeof(T);
 }
+bool valid_preference(const PhantomCosmeticPreference* p) {
+    return sized(p) && p->weapon_definition != 0 && p->weapon_definition <= 65535 &&
+           p->paint_kit <= 0x7fffffffU && p->seed <= 1000 && std::isfinite(p->wear) &&
+           p->wear >= 0.0f && p->wear <= 1.0f && p->stattrak >= -1 && p->stattrak <= 999999;
 }
+} // namespace
+
+namespace phantom {
+void snapshot_cosmetic_preferences(std::vector<CosmeticPreferenceEntry>& out) {
+    out.clear();
+    auto& store = preferences();
+    std::lock_guard<std::mutex> lock(store.mutex);
+    for (const auto& entry : store.entries) {
+        if (entry.preference.weapon_definition != 0) out.push_back(entry);
+    }
+}
+
+int32_t replace_cosmetic_preferences(const std::vector<CosmeticPreferenceEntry>& entries) {
+    if (entries.size() > 32) return PHANTOM_CAPACITY_REACHED;
+    for (const auto& entry : entries) {
+        if (!valid_preference(&entry.preference) ||
+            !valid_custom_name(entry.extras.custom_name) ||
+            !valid_mesh_group(entry.extras.mesh_group_mask)) {
+            return PHANTOM_INVALID_ARGUMENT;
+        }
+    }
+    try {
+        auto& store = preferences();
+        std::lock_guard<std::mutex> lock(store.mutex);
+        store.entries = {};
+        for (std::size_t i = 0; i < entries.size(); ++i) {
+            store.entries[i] = entries[i];
+        }
+        return PHANTOM_OK;
+    } catch (...) { return PHANTOM_INTERNAL_ERROR; }
+}
+} // namespace phantom
 
 uint32_t PHANTOM_CALL phantom_abi_version(void) { return abi; }
 
@@ -30,7 +71,8 @@ int32_t PHANTOM_CALL phantom_get_integration_status(PhantomIntegrationStatus* ou
     *out = {};
     out->struct_size = sizeof(*out);
     out->abi_version = abi;
-    constexpr char reason[] = "Experimental bomb adapter is present but not live-validated; cosmetic refresh is not implemented.";
+    constexpr char reason[] =
+        "Experimental bomb and local skin adapters require in-process client.dll and are not live-validated.";
     static_assert(sizeof(reason) <= sizeof(out->reason));
     std::memcpy(out->reason, reason, sizeof(reason));
     return PHANTOM_OK;
@@ -77,20 +119,22 @@ int32_t PHANTOM_CALL phantom_evaluate_bomb(const PhantomBombSnapshot* s, Phantom
 }
 
 int32_t PHANTOM_CALL phantom_set_cosmetic_preference(const PhantomCosmeticPreference* p) {
-    if (!sized(p) || p->weapon_definition == 0 || p->weapon_definition > 65535 ||
-        p->paint_kit > 0x7fffffffU || p->seed > 1000 || !std::isfinite(p->wear) ||
-        p->wear < 0 || p->wear > 1 || p->stattrak < -1)
-        return PHANTOM_INVALID_ARGUMENT;
+    if (!valid_preference(p)) return PHANTOM_INVALID_ARGUMENT;
     try {
         auto& store = preferences();
         std::lock_guard<std::mutex> lock(store.mutex);
         auto slot = std::find_if(store.entries.begin(), store.entries.end(),
-                                 [p](const auto& entry) { return entry.weapon_definition == p->weapon_definition; });
-        if (slot == store.entries.end())
+                                 [p](const auto& entry) {
+                                     return entry.preference.weapon_definition == p->weapon_definition;
+                                 });
+        if (slot == store.entries.end()) {
             slot = std::find_if(store.entries.begin(), store.entries.end(),
-                                [](const auto& entry) { return entry.weapon_definition == 0; });
-        if (slot == store.entries.end()) return PHANTOM_CAPACITY_REACHED;
-        *slot = *p;
+                                [](const auto& entry) { return entry.preference.weapon_definition == 0; });
+            if (slot == store.entries.end()) return PHANTOM_CAPACITY_REACHED;
+            slot->extras = {};
+        }
+        slot->preference = *p;
+        phantom::set_skin_loadout_enabled(true);
         return PHANTOM_OK;
     } catch (...) { return PHANTOM_INTERNAL_ERROR; }
 }
@@ -104,7 +148,112 @@ int32_t PHANTOM_CALL phantom_get_cosmetic_preference(uint32_t weapon, PhantomCos
         auto& store = preferences();
         std::lock_guard<std::mutex> lock(store.mutex);
         for (const auto& entry : store.entries) {
-            if (entry.weapon_definition == weapon) { *out = entry; return PHANTOM_OK; }
+            if (entry.preference.weapon_definition == weapon) {
+                *out = entry.preference;
+                return PHANTOM_OK;
+            }
+        }
+        return PHANTOM_NOT_FOUND;
+    } catch (...) { return PHANTOM_INTERNAL_ERROR; }
+}
+
+int32_t PHANTOM_CALL phantom_remove_cosmetic_preference(uint32_t weapon) {
+    if (!weapon || weapon > 65535) return PHANTOM_INVALID_ARGUMENT;
+    try {
+        auto& store = preferences();
+        std::lock_guard<std::mutex> lock(store.mutex);
+        for (auto& entry : store.entries) {
+            if (entry.preference.weapon_definition == weapon) {
+                entry = {};
+                return PHANTOM_OK;
+            }
+        }
+        return PHANTOM_NOT_FOUND;
+    } catch (...) { return PHANTOM_INTERNAL_ERROR; }
+}
+
+int32_t PHANTOM_CALL phantom_list_cosmetic_preferences(PhantomCosmeticPreference* out,
+                                                       uint32_t capacity, uint32_t* out_count) {
+    if (!out_count || (capacity > 0 && !out)) return PHANTOM_INVALID_ARGUMENT;
+    *out_count = 0;
+    try {
+        auto& store = preferences();
+        std::lock_guard<std::mutex> lock(store.mutex);
+        uint32_t total = 0;
+        for (const auto& entry : store.entries) {
+            if (entry.preference.weapon_definition == 0) continue;
+            if (total < capacity) out[total] = entry.preference;
+            ++total;
+        }
+        *out_count = total;
+        return PHANTOM_OK;
+    } catch (...) { return PHANTOM_INTERNAL_ERROR; }
+}
+
+int32_t PHANTOM_CALL phantom_set_cosmetic_custom_name(uint32_t weapon, const char* custom_name) {
+    if (!weapon || weapon > 65535 || !custom_name) return PHANTOM_INVALID_ARGUMENT;
+    try {
+        const std::string value(custom_name);
+        if (!phantom::valid_custom_name(value)) return PHANTOM_INVALID_ARGUMENT;
+        auto& store = preferences();
+        std::lock_guard<std::mutex> lock(store.mutex);
+        for (auto& entry : store.entries) {
+            if (entry.preference.weapon_definition == weapon) {
+                entry.extras.custom_name = value;
+                return PHANTOM_OK;
+            }
+        }
+        return PHANTOM_NOT_FOUND;
+    } catch (...) { return PHANTOM_INTERNAL_ERROR; }
+}
+
+int32_t PHANTOM_CALL phantom_get_cosmetic_custom_name(uint32_t weapon, char* out, uint32_t out_capacity) {
+    if (!out || out_capacity == 0) return PHANTOM_INVALID_ARGUMENT;
+    out[0] = '\0';
+    if (!weapon || weapon > 65535) return PHANTOM_INVALID_ARGUMENT;
+    try {
+        auto& store = preferences();
+        std::lock_guard<std::mutex> lock(store.mutex);
+        for (const auto& entry : store.entries) {
+            if (entry.preference.weapon_definition == weapon) {
+                const std::string& name = entry.extras.custom_name;
+                if (name.size() + 1 > out_capacity) return PHANTOM_CAPACITY_REACHED;
+                std::memcpy(out, name.c_str(), name.size() + 1);
+                return PHANTOM_OK;
+            }
+        }
+        return PHANTOM_NOT_FOUND;
+    } catch (...) { return PHANTOM_INTERNAL_ERROR; }
+}
+
+int32_t PHANTOM_CALL phantom_set_cosmetic_mesh_group(uint32_t weapon, uint64_t mesh_group_mask) {
+    if (!weapon || weapon > 65535 || !phantom::valid_mesh_group(mesh_group_mask))
+        return PHANTOM_INVALID_ARGUMENT;
+    try {
+        auto& store = preferences();
+        std::lock_guard<std::mutex> lock(store.mutex);
+        for (auto& entry : store.entries) {
+            if (entry.preference.weapon_definition == weapon) {
+                entry.extras.mesh_group_mask = mesh_group_mask;
+                return PHANTOM_OK;
+            }
+        }
+        return PHANTOM_NOT_FOUND;
+    } catch (...) { return PHANTOM_INTERNAL_ERROR; }
+}
+
+int32_t PHANTOM_CALL phantom_get_cosmetic_mesh_group(uint32_t weapon, uint64_t* out_mask) {
+    if (!out_mask) return PHANTOM_INVALID_ARGUMENT;
+    *out_mask = 0;
+    if (!weapon || weapon > 65535) return PHANTOM_INVALID_ARGUMENT;
+    try {
+        auto& store = preferences();
+        std::lock_guard<std::mutex> lock(store.mutex);
+        for (const auto& entry : store.entries) {
+            if (entry.preference.weapon_definition == weapon) {
+                *out_mask = entry.extras.mesh_group_mask;
+                return PHANTOM_OK;
+            }
         }
         return PHANTOM_NOT_FOUND;
     } catch (...) { return PHANTOM_INTERNAL_ERROR; }
@@ -120,5 +269,13 @@ int32_t PHANTOM_CALL phantom_clear_cosmetic_preferences(void) {
 }
 
 int32_t PHANTOM_CALL phantom_apply_cosmetics(void) {
-    return PHANTOM_NOT_INTEGRATED;
+    PhantomSkinApplyReport report{};
+    report.struct_size = sizeof(report);
+    return phantom_runtime_apply_skins(&report);
+}
+
+int32_t PHANTOM_CALL phantom_restore_cosmetics(void) {
+    PhantomSkinApplyReport report{};
+    report.struct_size = sizeof(report);
+    return phantom_runtime_restore_skins(&report);
 }

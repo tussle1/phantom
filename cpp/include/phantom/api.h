@@ -81,9 +81,19 @@ PHANTOM_API int32_t PHANTOM_CALL phantom_get_integration_status(PhantomIntegrati
 PHANTOM_API int32_t PHANTOM_CALL phantom_evaluate_bomb(const PhantomBombSnapshot* snapshot, PhantomBombTiming* out);
 PHANTOM_API int32_t PHANTOM_CALL phantom_set_cosmetic_preference(const PhantomCosmeticPreference* preference);
 PHANTOM_API int32_t PHANTOM_CALL phantom_get_cosmetic_preference(uint32_t weapon_definition, PhantomCosmeticPreference* out);
+PHANTOM_API int32_t PHANTOM_CALL phantom_remove_cosmetic_preference(uint32_t weapon_definition);
+PHANTOM_API int32_t PHANTOM_CALL phantom_list_cosmetic_preferences(PhantomCosmeticPreference* out, uint32_t capacity, uint32_t* out_count);
+/* Optional local-only nametag (<= 32 printable ASCII chars) and mesh group
+   override (0 = auto, 1 = modern, 2 = legacy) attached to a stored weapon preference. */
+PHANTOM_API int32_t PHANTOM_CALL phantom_set_cosmetic_custom_name(uint32_t weapon_definition, const char* custom_name);
+PHANTOM_API int32_t PHANTOM_CALL phantom_get_cosmetic_custom_name(uint32_t weapon_definition, char* out, uint32_t out_capacity);
+PHANTOM_API int32_t PHANTOM_CALL phantom_set_cosmetic_mesh_group(uint32_t weapon_definition, uint64_t mesh_group_mask);
+PHANTOM_API int32_t PHANTOM_CALL phantom_get_cosmetic_mesh_group(uint32_t weapon_definition, uint64_t* out_mask);
 PHANTOM_API int32_t PHANTOM_CALL phantom_clear_cosmetic_preferences(void);
-/* Deliberately reports NOT_INTEGRATED: no game hooks or refresh implementation. */
+/* Applies/restores local cosmetic preferences when loaded in-process with client.dll.
+   Returns PHANTOM_NOT_INTEGRATED outside CS2. Local-only: never alters inventory ownership. */
 PHANTOM_API int32_t PHANTOM_CALL phantom_apply_cosmetics(void);
+PHANTOM_API int32_t PHANTOM_CALL phantom_restore_cosmetics(void);
 
 #ifdef __cplusplus
 }

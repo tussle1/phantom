@@ -21,7 +21,7 @@ PRESETS = {
                          {'trigger': True, 'trigger_delay_ms': 250.0, 'skeleton': False,
                           'armor': False, 'radar': False, 'spectators': False, 'max_distance_m': 100.0}),
 }
-PRESERVE = ('keys', 'bones', 'mouse_yaw', 'mouse_pitch')
+PRESERVE = ('keys', 'bones', 'mouse_yaw', 'mouse_pitch', 'skins')
 
 
 def preset_config(name, current=None):

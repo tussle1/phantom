@@ -20,6 +20,12 @@ public:
     virtual bool read(std::uintptr_t address, void* output, std::size_t size) const = 0;
 };
 
+// Explicit opt-in read/write interface used only by the local cosmetic adapter.
+class IProcessMemory : public IMemory {
+public:
+    virtual bool write(std::uintptr_t address, const void* input, std::size_t size) = 0;
+};
+
 struct ProfileModules {
     std::uintptr_t entity_list = 0, local_player_pawn = 0, local_player_controller = 0;
     std::uintptr_t view_matrix = 0, view_angles = 0, sensitivity = 0, sensitivity_sensitivity = 0;
@@ -45,11 +51,24 @@ struct BombFieldLayout {
     std::uint32_t planted_defuse_remaining = 0, planted_defuse_length = 0, planted_defused = 0;
     std::uint32_t planted_activated = 0;
 };
+struct SkinFieldLayout {
+    std::uint32_t weapon_services = 0, my_weapons = 0, active_weapon = 0;
+    std::uint32_t entity_identity = 0, identity_handle = 0, owner_entity = 0, steam_id = 0;
+    std::uint32_t attributes_initialized = 0, attribute_manager = 0, econ_item = 0;
+    std::uint32_t item_definition_index = 0, entity_quality = 0;
+    std::uint32_t item_id_high = 0, item_id_low = 0, account_id = 0, item_initialized = 0;
+    std::uint32_t custom_name = 0;
+    std::uint32_t original_owner_xuid_low = 0, original_owner_xuid_high = 0;
+    std::uint32_t fallback_paint_kit = 0, fallback_seed = 0;
+    std::uint32_t fallback_wear = 0, fallback_stattrak = 0;
+    std::uint32_t viewmodel_attachment = 0, custom_econ_reload_id = 0, mesh_group_mask = 0;
+};
 struct Profile {
     ProfileModules modules;
     ProfileFields fields;
     ProfileLayout layout;
     BombFieldLayout bomb;
+    SkinFieldLayout skins;
     std::string source;
     static Profile reference_26598758();
 };

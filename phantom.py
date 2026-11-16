@@ -202,6 +202,7 @@ def parser():
     result.add_argument('--config',default='default',help='Named native config, without .json')
     result.add_argument('--init-config',action='store_true',help='Create a config without attaching to a game.')
     result.add_argument('--list-configs',action='store_true')
+    result.add_argument('--export-skins',action='store_true',help='Export local skin loadout (.skin-loadout.json) from the selected config.')
     result.add_argument('--update-offsets',action='store_true',help='Explicitly fetch a pinned profile from a2x/cs2-dumper.')
     result.add_argument('--ref',default='main',help='main or exact a2x/cs2-dumper commit SHA')
     result.add_argument('--import-dumps',type=Path,help='Directory containing offsets.json and client_dll.json; requires --ref SHA.')
@@ -248,6 +249,12 @@ def main(argv=None):
                 raise ValueError('Config already exists; it has not been overwritten.')
             save_config(path,Config())
             print(path)
+            return 0
+        if args.export_skins:
+            from native.skins import export_loadout
+            config = load_config(path) if path.exists() else Config()
+            exported = export_loadout(args.config_dir, config.skin_changer, config.skins)
+            print(f'Exported local skin loadout ({len(config.skins)} weapons, enabled={config.skin_changer}) to {exported}')
             return 0
         if args.check_profile:
             profile = load_profile(args.profile)

@@ -2,27 +2,26 @@
 
 This directory builds `phantom-internal-foundation.dll` (or the platform shared library used by tests) and exposes a small C ABI.
 
-**Status: experimental and not live-validated against CS2.** The DLL now contains a build-specific, opt-in in-process bomb reader and transparent Windows overlay. Loading the DLL alone does nothing: a host must explicitly call `phantom_runtime_start_bomb_overlay()`. Reads fail closed if `client.dll`, mapped fields, or timing data are unavailable. The implementation uses a pinned reference profile and fabricated-memory tests; those tests are not proof that current live-game offsets, injection, or rendering work.
+**Status: experimental and not live-validated against CS2.** The DLL contains build-specific, opt-in in-process bomb-timer and local skin-changer runtime adapters. Loading the DLL alone does nothing: a host must explicitly call `phantom_runtime_start_bomb_overlay()`, `phantom_runtime_apply_skins()`, or `phantom_runtime_start_skin_watcher()`. Operations fail closed if `client.dll`, mapped fields, serial-bearing handles, or local ownership checks fail. The implementation uses the pinned `a2x/cs2-dumper` reference profile and fabricated-memory tests; those tests are not proof that current live-game offsets, injection, or rendering work.
 
 Implemented and tested:
 
 - Pure bomb-timer evaluation with stale-data rejection and explicit ticking, defusing, elapsed, and defused phases.
 - C++ entity/bomb decoding against a sparse fabricated-memory fixture.
 - Windows-only runtime exports in `phantom/runtime.h` for direct in-process bomb capture and an opt-in Poppins timer overlay.
-- A capacity-bounded cosmetic-preference store for weapon definition, paint kit, seed, wear, and optional StatTrak.
-- A host-driven cosmetic controller that records baselines, applies values through an adapter, refreshes, and restores; tests use a fabricated adapter. It is not connected to CS2.
+- A capacity-bounded (32-weapon) cosmetic preference store in `phantom/api.h` for weapon definition, paint kit, seed, wear, optional StatTrak, optional custom local nametag, and model mesh group (`auto` / `modern` / `legacy`).
+- `phantom::CosmeticController` and `phantom::MemoryCosmeticAdapter` in `phantom/cosmetics.h`, resolving local weapons from `CPlayer_WeaponServices`, verifying full 32-bit serial-bearing handles and local pawn ownership on every read/write/refresh, recording baselines, updating fallback skin attributes / `m_iItemIDHigh` / `m_iAccountID` / `m_iEntityQuality` / `m_szCustomName` / `m_MeshGroupMask` / `m_nCustomEconReloadEventId`, rolling back on failure, and restoring exact original baselines on removal or shutdown.
+- Strict `.skin-loadout.json` parsing (`phantom_runtime_load_skin_file`) compatible with the native Python panel's **Skins** tab and `phantom.py --export-skins`.
+- Opt-in local skin runtime exports in `phantom/runtime.h` (`phantom_runtime_apply_skins`, `phantom_runtime_restore_skins`, `phantom_runtime_start_skin_watcher`, `phantom_runtime_stop_skin_watcher`) plus `phantom_apply_cosmetics()` / `phantom_restore_cosmetics()` (returning `PHANTOM_NOT_INTEGRATED` outside CS2).
 - Windows CI build, CTest coverage, and DLL load/unload/export smoke testing.
 
 Not implemented or validated:
 
 - DLL injection or any anti-cheat bypass.
-- A working local cosmetic override/refresh path. `phantom_apply_cosmetics()` still returns `PHANTOM_NOT_INTEGRATED`; preferences are not written, networked, rendered, or applied.
-- Live CS2 validation of module offsets, field offsets, bomb-site mapping, overlay behavior, or lifecycle safety.
+- Live CS2 validation of module offsets, field offsets, bomb-site mapping, weapon fallback/mesh refresh behavior, overlay behavior, or lifecycle safety.
 - Inventory ownership changes or cosmetics visible to other players.
 
-The cosmetic controller in `phantom/cosmetics.h` requires a host-supplied adapter that resolves serial-bearing local weapon handles, verifies ownership on every operation, writes values, and refreshes materials on the game thread. It has no C ABI, no built-in adapter, no UI and does not make `phantom_apply_cosmetics()` operational.
-
-No anti-cheat compatibility or account safety is claimed. Treat the runtime adapter as unverified until it is tested in an isolated/offline environment against the exact target build.
+No anti-cheat compatibility or account safety is claimed. Treat the runtime adapters as unverified until tested in an isolated/offline environment against the exact target build.
 
 ## Build
 

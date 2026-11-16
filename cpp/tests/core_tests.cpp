@@ -1,8 +1,11 @@
 #include "phantom/api.h"
+#include "phantom/runtime.h"
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <filesystem>
+#include <fstream>
 
 static int failures = 0;
 static uint32_t check_count = 0;
@@ -126,7 +129,70 @@ void cosmetic_tests() {
     p.wear = 1.25f;
     check(phantom_set_cosmetic_preference(&p) == PHANTOM_INVALID_ARGUMENT, "out-of-range wear rejected");
     check(phantom_apply_cosmetics() == PHANTOM_NOT_INTEGRATED,
-          "cosmetic application is deliberately unavailable until integration exists");
+          "cosmetic application fails closed without client.dll");
+    check(phantom_restore_cosmetics() == PHANTOM_NOT_INTEGRATED,
+          "cosmetic restore fails closed without client.dll");
+
+    // Extras (custom name, mesh group), listing, and single-weapon removal.
+    check(phantom_set_cosmetic_custom_name(7, "phantom redline") == PHANTOM_OK, "custom name accepted");
+    char name_buf[64]{};
+    check(phantom_get_cosmetic_custom_name(7, name_buf, sizeof(name_buf)) == PHANTOM_OK &&
+          std::strcmp(name_buf, "phantom redline") == 0, "custom name round trips");
+    check(phantom_set_cosmetic_custom_name(7, "name-with-\n-newline") == PHANTOM_INVALID_ARGUMENT,
+          "control character in custom name rejected");
+    check(phantom_set_cosmetic_custom_name(9999, "missing") == PHANTOM_NOT_FOUND,
+          "custom name for absent weapon returns not found");
+    check(phantom_set_cosmetic_mesh_group(7, 2) == PHANTOM_OK, "legacy mesh group accepted");
+    uint64_t mask = 0;
+    check(phantom_get_cosmetic_mesh_group(7, &mask) == PHANTOM_OK && mask == 2, "mesh group round trips");
+    check(phantom_set_cosmetic_mesh_group(7, 5) == PHANTOM_INVALID_ARGUMENT, "invalid mesh group rejected");
+    PhantomCosmeticPreference list_buf[4]{};
+    uint32_t list_count = 0;
+    check(phantom_list_cosmetic_preferences(list_buf, 4, &list_count) == PHANTOM_OK &&
+          list_count == 1 && list_buf[0].weapon_definition == 7 && list_buf[0].paint_kit == 99,
+          "list preferences returns stored weapons");
+    check(phantom_remove_cosmetic_preference(7) == PHANTOM_OK &&
+          phantom_get_cosmetic_preference(7, &out) == PHANTOM_NOT_FOUND,
+          "single preference removal clears weapon");
+    check(phantom_remove_cosmetic_preference(7) == PHANTOM_NOT_FOUND, "removing absent weapon reports not found");
+
+    // Runtime skin APIs fail closed without client.dll, while JSON file loading validates cross-platform.
+    PhantomSkinApplyReport report{};
+    report.struct_size = sizeof(report);
+    check(phantom_runtime_apply_skins(&report) == PHANTOM_NOT_INTEGRATED, "runtime apply fails closed without client.dll");
+    check(phantom_runtime_restore_skins(&report) == PHANTOM_NOT_INTEGRATED, "runtime restore fails closed without client.dll");
+    PhantomSkinWatcherOptions watcher{};
+    watcher.struct_size = sizeof(watcher);
+    watcher.poll_interval_ms = 200;
+    watcher.restore_on_stop = 1;
+    check(phantom_runtime_start_skin_watcher(&watcher) == PHANTOM_NOT_INTEGRATED, "watcher fails closed without client.dll");
+    watcher.poll_interval_ms = 10;
+    check(phantom_runtime_start_skin_watcher(&watcher) == PHANTOM_INVALID_ARGUMENT, "watcher rejects invalid poll interval");
+    check(phantom_runtime_stop_skin_watcher() == PHANTOM_OK, "stopping idle watcher is safe");
+
+    const auto tmp_path = std::filesystem::temp_directory_path() / "phantom_test_skin_loadout.json";
+    {
+        std::ofstream file(tmp_path, std::ios::binary);
+        file << R"({"version":1,"enabled":true,"entries":[{"weapon_definition":7,"paint_kit":282,"seed":420,"wear":0.15,"stattrak":1337,"custom_name":"ak-test","mesh_group":2}]})";
+    }
+    check(phantom_runtime_load_skin_file(tmp_path.u8string().c_str()) == PHANTOM_OK, "valid skin loadout file loads");
+    check(phantom_get_cosmetic_preference(7, &out) == PHANTOM_OK && out.paint_kit == 282 && out.stattrak == 1337,
+          "loaded file populates preference store");
+    check(phantom_get_cosmetic_custom_name(7, name_buf, sizeof(name_buf)) == PHANTOM_OK &&
+          std::strcmp(name_buf, "ak-test") == 0, "loaded file populates custom name");
+    check(phantom_get_cosmetic_mesh_group(7, &mask) == PHANTOM_OK && mask == 2,
+          "loaded file populates mesh group");
+    {
+        std::ofstream file(tmp_path, std::ios::binary);
+        file << R"({"version":1,"enabled":true,"entries":[{"weapon_definition":7,"paint_kit":282,"seed":9999,"wear":0.15,"stattrak":-1}]})";
+    }
+    check(phantom_runtime_load_skin_file(tmp_path.u8string().c_str()) == PHANTOM_INVALID_ARGUMENT,
+          "invalid loadout file rejected");
+    check(phantom_get_cosmetic_preference(7, &out) == PHANTOM_OK && out.paint_kit == 282,
+          "invalid loadout file preserves prior preferences");
+    std::error_code ec;
+    std::filesystem::remove(tmp_path, ec);
+
     // Fill every remaining slot after weapon 7, then verify overflow is explicit.
     for (uint32_t weapon = 100; weapon < 131; ++weapon) {
         p = valid_preference(weapon, weapon);

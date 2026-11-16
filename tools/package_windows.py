@@ -64,11 +64,14 @@ profile with a newly pinned GitHub dump, open a terminal in this folder and run:
 
 The bundled offsets are a reference, not proof of current game compatibility.
 The build checks packaging, API imports, unit tests, CLI tools and offscreen GUI rendering.
-phantom-cpp contains an x64 C++ foundation tested WITHOUT CS2. It has no
-injection, game hooks, live bomb reads, rendering, or cosmetic application.
-It does NOT provide working skins or bomb timers by itself. It does NOT test actual CS2 behavior, overlay rendering, live memory offsets,
-or whether the game accepts synthetic input. This is not the full requested
-feature suite. See README.md for the exact implementation scope.
+phantom-cpp contains an x64 C++ foundation tested WITHOUT CS2. It includes
+experimental opt-in bomb-timer and local skin-changer runtime adapters, but it
+has no DLL injector, anti-cheat bypass, or live CS2 verification, and never
+alters inventory ownership or other players' views. Local skin preferences can
+be configured in the panel's Skins tab and exported to .skin-loadout.json.
+This build does NOT test actual CS2 behavior, overlay rendering, live memory
+offsets, or whether the game accepts synthetic input. See README.md for the
+exact implementation scope.
 Game memory reads/input automation can result in account bans. No anti-cheat
 compatibility is claimed.
 '''
@@ -125,6 +128,7 @@ def package(executable, output, revision, foundation_dll=None):
             archive.write(dll, 'phantom-cpp/phantom-internal-foundation.dll')
             archive.write(ROOT/'cpp/README.md', 'phantom-cpp/README.md')
             archive.write(ROOT/'cpp/include/phantom/api.h', 'phantom-cpp/include/phantom/api.h')
+            archive.write(ROOT/'cpp/include/phantom/cosmetics.h', 'phantom-cpp/include/phantom/cosmetics.h')
             archive.write(ROOT/'cpp/include/phantom/runtime.h', 'phantom-cpp/include/phantom/runtime.h')
         for name in PRESETS:
             archive.writestr('presets/'+preset_filename(name), json.dumps(preset_document(name), indent=2))
