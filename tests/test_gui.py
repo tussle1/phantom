@@ -130,6 +130,38 @@ class GuiTests(unittest.TestCase):
         finally:
             self.panel.session.process = None
 
+    def test_skeleton_editor_targets_style_and_persistence(self):
+        from PySide6.QtCore import QPoint
+        self.panel.select_page('Visuals')
+        QTest.mouseClick(self.panel.editor_button, Qt.MouseButton.LeftButton)
+        editor = self.panel.esp_editor
+        self.app.processEvents()
+        self.assertTrue(editor.isVisible())
+        self.assertTrue(editor.isModal())
+        original_aim = self.panel.model.config.aim
+        for target in ('head','neck','chest','pelvis'):
+            x,y = editor.preview.points()[target]
+            QTest.mouseClick(editor.preview,Qt.MouseButton.LeftButton,pos=QPoint(round(x),round(y)))
+            self.assertEqual(self.panel.model.config.priority_bone,target)
+        self.assertEqual(self.panel.model.config.aim,original_aim)
+        QTest.keyClick(editor.preview,Qt.Key.Key_1)
+        self.assertEqual(self.panel.model.config.priority_bone,'head')
+        QTest.mouseClick(editor.style_checks['box'],Qt.MouseButton.LeftButton)
+        editor.width_combo.setCurrentText('3')
+        editor.change_style('visible_color','#21aabb')
+        self.assertTrue(self.panel.model.config.esp_style['box'])
+        editor.save_config()
+        from native.gui_model import SettingsModel
+        restored = SettingsModel(self.temp.name).config
+        self.assertEqual(restored.esp_style['visible_color'],'#21aabb')
+        self.assertEqual(restored.esp_style['line_width'],3)
+        before = self.panel.model.document()
+        editor.change_style('visible_color','#000000')
+        self.assertEqual(self.panel.model.document(),before)
+        editor.close()
+        self.panel.select_page('Aim')
+        self.assertEqual(self.panel.combos['priority_bone'].currentText(),'head')
+
     def test_version_is_displayed(self):
         self.assertTrue(any(label.text() == 'phantom v1.2.0' for label in self.panel.findChildren(QLabel)))
 

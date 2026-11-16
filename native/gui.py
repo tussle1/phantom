@@ -22,6 +22,7 @@ from .hotkeys import MenuHotkey, capture_vk
 from .version import __version__
 from . import appearance
 from .presets import PRESETS, preset_filename
+from .esp_editor import EspEditor
 
 BG, DARK, INK, MUTED, PINK = '#272234', '#201a2b', '#c5b5f6', '#9284ac', '#fc589b'
 STYLE = '''
@@ -560,6 +561,8 @@ class ControlPanel(QWidget):
         except (OSError,ValueError):
             self.hero.profile = 'Select an offset profile in Configs'
         self.hero.update()
+        if hasattr(self, 'esp_editor'):
+            self.esp_editor.refresh()
 
     def fade_details(self):
         self.page_motion.stop()
@@ -627,11 +630,24 @@ class ControlPanel(QWidget):
     def note(self,text):
         label=QLabel(text);label.setWordWrap(True);label.setStyleSheet('font-size: 11px; color: #9284ac;');self.details_layout.addWidget(label)
 
+    def open_esp_editor(self):
+        if not hasattr(self, 'esp_editor'):
+            self.esp_editor = EspEditor(self)
+        self.esp_editor.refresh()
+        self.esp_editor.show();self.esp_editor.raise_();self.esp_editor.activateWindow()
+
+    def add_editor_button(self):
+        self.editor_button = QPushButton('Open skeleton ESP designer…')
+        self.editor_button.setAccessibleName('Open ESP designer')
+        self.editor_button.clicked.connect(self.open_esp_editor)
+        self.details_layout.addWidget(self.editor_button)
+
     def build_details(self):
         self.clear_details()
         if self.page=='Appearance':
             self.build_appearance()
         elif self.page=='Aim':
+            self.add_editor_button()
             self.section('AIM TUNING')
             self.detail_combo('Aim mode','aim',['off','smooth','hardlock'])
             self.detail_combo('Priority bone','priority_bone',['head','neck','chest','pelvis'])
@@ -641,6 +657,7 @@ class ControlPanel(QWidget):
             self.note('Hold right mouse to aim and left Alt to trigger by default. Edit either binding in Input. New configurations start with both features off.')
             self.note('Target filtering uses an entity spotted-mask proxy, not per-bone or map visibility.')
         elif self.page=='Visuals':
+            self.add_editor_button()
             self.section('OVERLAY DISPLAY')
             for label,key in [('Skeleton','skeleton'),('Health bars','health'),('Armor bars','armor'),('Show teammates','teammates'),('Circular radar','radar'),('Spectator list','spectators')]:
                 self.detail_toggle(label,key)
@@ -799,6 +816,8 @@ class ControlPanel(QWidget):
         self.cancel_capture()
         if self.session.process is not None:
             self.closing=True;self.stop_runtime();event.ignore();return
+        if hasattr(self, 'esp_editor'):
+            self.esp_editor.close()
         self.timer.stop();self.menu_timer.stop();self.apply_timer.stop()
         for motion in self.findChildren(QVariantAnimation):
             motion.stop()
