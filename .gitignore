@@ -6,3 +6,13 @@ node_modules/
 .test-configs/
 playwright-report/
 test-results/
+
+# Native runtime artifacts
+dist/
+build/
+*.spec
+.offsets/
+.native-configs/
+
+# Downloadable build packages
+/artifacts/

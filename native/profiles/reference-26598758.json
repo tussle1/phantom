@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "source": "cb01076744f3554324d76b7a4830f0fcdfde95fb",
+  "modules": {
+    "dwEntityList": 40931344,
+    "dwLocalPlayerPawn": 39140664,
+    "dwLocalPlayerController": 38973640,
+    "dwViewMatrix": 39163456,
+    "dwViewAngles": 39232696,
+    "dwSensitivity": 39129144,
+    "dwSensitivity_sensitivity": 88
+  },
+  "fields": {
+    "health": 844,
+    "team": 999,
+    "scene": 816,
+    "flags": 1012,
+    "velocity": 1016,
+    "origin": 200,
+    "dormant": 259,
+    "view_offset": 3936,
+    "model_state": 320,
+    "pawn_handle": 2348,
+    "name": 1788,
+    "armor": 7936,
+    "spotted_state": 7864,
+    "spotted_mask": 12,
+    "crosshair": 14092,
+    "observer_pawn": 2352,
+    "observer_services": 4872,
+    "observer_target": 76
+  },
+  "layout": {
+    "chunk_offset": 16,
+    "chunk_size": 512,
+    "entry_strides": [
+      112,
+      120
+    ],
+    "handle_mask": 32767,
+    "bone_array": 128,
+    "bone_stride": 32,
+    "controller_limit": 64
+  },
+  "reference": {
+    "url": "https://www.cheatoffsets.com/g/cs2/b/96",
+    "listed_build": "26598758",
+    "note": "Compared five module offsets to the user-supplied page. Other fields sourced from the pinned a2x dump. Not live-verified."
+  }
+}

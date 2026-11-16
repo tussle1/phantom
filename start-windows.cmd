@@ -2,10 +2,11 @@
 cd /d "%~dp0"
 where py >nul 2>nul
 if errorlevel 1 (
-  echo Python 3.11 or newer is required. Install Python with the Windows launcher.
+  echo 64-bit Python 3.11 or newer is required.
   pause
   exit /b 1
 )
-echo Open http://127.0.0.1:8765 in your browser after startup.
-py -3 companion.py
-pause
+py -3 phantom.py %*
+set "RESULT=%ERRORLEVEL%"
+if not "%RESULT%"=="0" pause
+exit /b %RESULT%
