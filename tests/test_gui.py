@@ -9,8 +9,8 @@ from unittest.mock import patch
 try:
     from PySide6.QtCore import Qt
     from PySide6.QtTest import QTest
-    from PySide6.QtGui import QFontInfo, QFontMetrics
-    from PySide6.QtWidgets import QApplication
+    from PySide6.QtGui import QFont, QFontInfo, QFontMetrics
+    from PySide6.QtWidgets import QApplication, QLabel, QPushButton
     from native.gui import ControlPanel
     QT_AVAILABLE = True
 except (ImportError, OSError):
@@ -44,6 +44,72 @@ class GuiTests(unittest.TestCase):
         metrics = QFontMetrics(font)
         self.assertTrue(all(metrics.inFontUcs4(ord(c)) for c in REQUIRED_TEXT))
         self.assertGreater(metrics.horizontalAdvance('Phantom - Start runtime'), 0)
+
+    def test_version_is_displayed(self):
+        self.assertTrue(any(label.text() == 'phantom v1.2.0' for label in self.panel.findChildren(QLabel)))
+
+    def test_toggle_animation_reverses_and_follows_blocked_model_refresh(self):
+        from native.gui import Toggle
+        toggle = Toggle(False)
+        self.addCleanup(toggle.deleteLater)
+        toggle.setChecked(True)
+        QTest.qWait(70)
+        self.assertGreater(toggle.position, 0)
+        self.assertLess(toggle.position, 1)
+        toggle.setChecked(False)
+        QTest.qWait(210)
+        self.assertAlmostEqual(toggle.position, 0)
+        toggle.blockSignals(True)
+        toggle.setChecked(True)
+        QTest.qWait(210)
+        self.assertAlmostEqual(toggle.position, 1)
+        self.assertTrue(toggle.isChecked())
+
+    def test_hover_and_page_fades_settle_after_rapid_changes(self):
+        button = self.panel.start_button
+        button.animate_hover(1.0)
+        QTest.qWait(60)
+        self.assertGreater(button.hover_progress, 0)
+        button.animate_hover(0.0)
+        QTest.qWait(190)
+        self.assertAlmostEqual(button.hover_progress, 0)
+        for name in ('Input', 'Configs', 'Aim', 'Visuals'):
+            self.panel.select_page(name)
+        QTest.qWait(230)
+        self.assertAlmostEqual(self.panel.details_opacity.opacity(), 1)
+        self.assertEqual(self.panel.page, 'Visuals')
+        self.panel.toggle_more()
+        self.assertAlmostEqual(self.panel.details_opacity.opacity(), 1)
+        self.panel.toggle_more()
+        QTest.qWait(230)
+        self.assertAlmostEqual(self.panel.details_opacity.opacity(), 1)
+
+    def test_horizontal_layout_and_compact_restore(self):
+        self.assertGreater(self.panel.width(), self.panel.height())
+        self.assertGreaterEqual(self.panel.details_scroll.x(), self.panel.overview.width())
+        self.assertGreater(self.panel.details_scroll.width(), 300)
+        for page in ('Visuals', 'Aim', 'Input', 'Configs'):
+            self.panel.select_page(page)
+            self.app.processEvents()
+            self.assertGreater(self.panel.width(), self.panel.height())
+            self.assertTrue(self.panel.details_scroll.isVisible())
+        self.panel.toggle_more();self.app.processEvents()
+        self.assertEqual(self.panel.width(), 440)
+        self.assertFalse(self.panel.details_scroll.isVisible())
+        self.panel.toggle_more();self.app.processEvents()
+        self.assertGreater(self.panel.width(), self.panel.height())
+
+    def test_lowercase_is_presentation_only(self):
+        from native.typography import ui_font
+        self.assertEqual(ui_font(10).capitalization(), QFont.Capitalization.AllLowercase)
+        for page in ('Visuals', 'Aim', 'Input', 'Configs'):
+            self.panel.select_page(page)
+            self.app.processEvents()
+            for widget in self.panel.findChildren(QLabel) + self.panel.findChildren(QPushButton):
+                self.assertEqual(widget.font().capitalization(), QFont.Capitalization.AllLowercase)
+        self.panel.model.save('MixedCase')
+        self.assertEqual(self.panel.model.name, 'MixedCase')
+        self.assertTrue((Path(self.temp.name)/'MixedCase.json').is_file())
 
     def test_menu_toggle_hides_reopens_and_controls_pause_state(self):
         self.assertTrue(self.panel.isVisible())
