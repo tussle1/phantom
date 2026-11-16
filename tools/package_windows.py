@@ -28,8 +28,8 @@ exit /b %RESULT%\r
 INSTRUCTIONS = 'PHANTOM v'+__version__+''' - WINDOWS X64
 
 1. Extract the entire ZIP into a folder. Do not run from inside the ZIP.
-2. Double-click run.cmd to open the native control panel. No Python is required.
-3. Click Start runtime in the panel when you want to attach. Stop detaches.
+2. Double-click run.cmd. The Phantom startup console and native control panel open together. No Python is required.
+3. Click Start runtime in the panel when you want to attach. The console only reports attachment after cs2.exe is actually attached; Stop detaches.
 4. Right Shift hides/reopens the menu. The worker pauses while the menu is open.
 5. Use borderless/windowed CS2. End stops the runtime; the panel stays open.
 6. Rebind Menu toggle in Input; save in Configs to persist it.
