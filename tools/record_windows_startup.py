@@ -104,4 +104,8 @@ def record(output):
 
 
 if __name__ == '__main__':
-    record(sys.argv[1] if len(sys.argv) > 1 else 'artifacts/startup-cmd.mp4')
+    try:
+        record(sys.argv[1] if len(sys.argv) > 1 else 'artifacts/startup-cmd.mp4')
+    except Exception as error:
+        print(f'::error::{type(error).__name__}: {error}', flush=True)
+        raise
