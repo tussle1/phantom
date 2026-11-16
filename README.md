@@ -118,6 +118,20 @@ the current visual state, and closing the panel stops active animations.
 
 ### Interactive skeleton ESP designer
 
+[Watch the full 78-second ESP designer walkthrough](docs/demos/esp-designer-walkthrough.mp4).
+It covers all four click/keyboard targets, every output toggle, widths 1–4,
+all five real Qt color pickers, sample states, cancel, black-color rejection,
+reset, save, and loading/reopening the saved design. Aim remains off and no game
+worker starts. Actual Qt window captures are composited with explanatory captions;
+Qt (rather than Windows-native) color dialogs are forced only for recording.
+
+To reproduce with the optional `imageio-ffmpeg==0.6.0` capture dependency:
+
+```sh
+python tools/record_esp_designer.py --output artifacts/esp-designer-walkthrough.mp4
+```
+
+
 Open **Visuals** or **Aim**, then **open skeleton ESP designer**. The separate
 native editor displays a clearly labeled sample actor, never fabricated live
 telemetry. Toggle ESP output, skeleton, health/armor bars, bounding box, names,
