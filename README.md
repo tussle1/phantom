@@ -90,7 +90,7 @@ buttons are drawn by Qt. Labels and controls are adapted to the implemented CS2 
 not the rhythm-game autoplay controls in the reference.
 
 - **Visuals:** skeleton, health/armor bars, teammates, radar, spectators, range.
-- **Aim:** mode, priority bone, smoothing, angular FOV, speed and linear prediction.
+- **Aim:** mode, priority bone, smoothing, angular FOV with an optional projected ring, speed and linear prediction. The trigger delay can be set from 0–2000 ms. The optional `catalyst` aim mode adapts the movement curve from [Catalyst](https://github.com/nul1ex/catalyst) (commit `2060cede08d8de7af9fc85c93ccb6eb0cd442e2f`) with the repository owner’s permission. It still uses Phantom’s spotted-mask target selection, not Catalyst’s hitbox, visibility, penetration, weapon-state or hitchance systems. Phantom bounds mouse events to 250 counts and does not read scoped FOV sensitivity adjustment; `Max speed` affects the other aim modes, not `catalyst`.
 - **Input:** movement preference and real key/mouse binding capture; Escape cancels.
 - **Configs:** validated named save/load and an explicit offset-profile file picker.
 
@@ -135,7 +135,7 @@ python tools/record_esp_designer.py --output artifacts/esp-designer-walkthrough.
 Open **Visuals** or **Aim**, then **open skeleton ESP designer**. The separate
 native editor displays a clearly labeled sample actor, never fabricated live
 telemetry. Toggle ESP output, skeleton, health/armor bars, bounding box, names,
-and distance labels; choose line thickness (1–4) and spotted/unspotted/team,
+and distance labels; choose full or cornered bounding boxes and line thickness (1–4) and spotted/unspotted/team,
 health and armor colors. The preview and Windows GDI player overlay consume the
 same drawing commands. The faded guide and selection dots exist only in the
 editor, even if ESP/skeleton output is disabled. Radar and spectator layout are

@@ -25,6 +25,8 @@ class Config:
     spectators: bool = True
     aim: str = 'off'
     aim_fov: float = 3.0
+    aim_draw_fov: bool = False
+    catalyst_smoothing: float = 5.0
     smooth_time: float = 0.12
     max_aim_speed: float = 90.0
     prediction_ms: float = 0.0
@@ -44,8 +46,8 @@ class Config:
         'trigger_toggle': 0x77, 'radar_toggle': 0x74, 'reload': 0x78, 'save': 0x79, 'exit': 0x23})
 
 
-FLOATS = {'aim_fov': (0.1, 30), 'smooth_time': (0.02, 2), 'max_aim_speed': (1, 360),
-          'prediction_ms': (0, 250), 'trigger_delay_ms': (20, 2000),
+FLOATS = {'catalyst_smoothing': (1, 100), 'aim_fov': (0.1, 30), 'smooth_time': (0.02, 2), 'max_aim_speed': (1, 360),
+          'prediction_ms': (0, 250), 'trigger_delay_ms': (0, 2000),
           'max_distance_m': (1, 1000), 'mouse_yaw': (0.001, 1), 'mouse_pitch': (0.001, 1)}
 NAME = re.compile(r'[A-Za-z0-9][A-Za-z0-9 _-]{0,39}\Z')
 
@@ -55,8 +57,11 @@ def validate_config(document):
         raise ValueError('Expected native config version 1.')
     settings = document['settings']
     defaults = asdict(Config())
-    if isinstance(settings, dict) and set(settings) == set(defaults)-{'esp_style'}:
-        settings = {**settings, 'esp_style': dict(DEFAULT_STYLE)}
+    # Upgrade older v1 settings only for explicitly introduced optional fields.
+    if isinstance(settings, dict) and not (set(settings) - set(defaults)):
+        missing = set(defaults) - set(settings)
+        if missing <= {'esp_style', 'aim_draw_fov', 'catalyst_smoothing'}:
+            settings = {**settings, **{key: defaults[key] for key in missing}}
     if not isinstance(settings, dict) or set(settings) != set(defaults):
         raise ValueError('Unknown or missing native setting; dashboard configs are not native configs.')
     for key, default in defaults.items():
@@ -67,7 +72,13 @@ def validate_config(document):
             lo, hi = FLOATS[key]
             if type(value) not in (int, float) or not math.isfinite(value) or not lo <= value <= hi:
                 raise ValueError(f'{key} must be between {lo} and {hi}.')
+            if key == 'catalyst_smoothing' and value != int(value):
+                raise ValueError('catalyst_smoothing must be a whole number.')
     style = settings['esp_style']
+    # Upgrade previously saved v1 ESP styles without modifying the caller's data.
+    if isinstance(style, dict) and set(style) == set(DEFAULT_STYLE)-{'box_style'}:
+        style = {**style, 'box_style': DEFAULT_STYLE['box_style']}
+        settings = {**settings, 'esp_style': style}
     if not isinstance(style, dict) or set(style) != set(DEFAULT_STYLE):
         raise ValueError('Expected the complete ESP style.')
     for key, default in DEFAULT_STYLE.items():
@@ -75,13 +86,16 @@ def validate_config(document):
         if key.endswith('_color'):
             if not isinstance(value, str) or not re.fullmatch(r'#[0-9a-fA-F]{6}', value) or value.lower() == '#000000':
                 raise ValueError('ESP colors require #rrggbb; pure black is the overlay transparency key.')
+        elif key == 'box_style':
+            if value not in ('full', 'corner') or not isinstance(value, str):
+                raise ValueError('ESP box style must be full or corner.')
         elif key == 'line_width':
             if type(value) is not int or not 1 <= value <= 4:
                 raise ValueError('ESP line width must be 1–4.')
         elif type(value) is not bool:
             raise ValueError('ESP visibility options must be booleans.')
-    if settings['aim'] not in ('off', 'hardlock', 'smooth'):
-        raise ValueError('aim must be off, hardlock, or smooth. Silent aim is not implemented.')
+    if settings['aim'] not in ('off', 'hardlock', 'smooth', 'catalyst'):
+        raise ValueError('aim must be off, hardlock, smooth, or catalyst. Silent aim is not implemented.')
     if not isinstance(settings['bones'], dict) or set(settings['bones']) != set(defaults['bones']):
         raise ValueError('Expected the complete named bone map.')
     if any(type(v) is not int or not 0 <= v <= 255 for v in settings['bones'].values()):

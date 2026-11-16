@@ -379,6 +379,9 @@ class Overlay:
         frame,config,w,h = self.frame,self.config,self.width,self.height
         self.text(dc,18,16,f'PHANTOM | ESP {"ON" if config.esp else "OFF"} | AIM {config.aim.upper()} | TRIGGER {"ON" if config.trigger else "OFF"}',PURPLE)
         self.text(dc,18,35,'F6 ESP / F7 aim / F8 trigger / F9 reload / F10 save / End exit')
+        from .esp_style import aim_fov_commands
+        for command in aim_fov_commands(frame,config,w,h):
+            self.line(dc,command.start,command.end,rgb(222,217,240),command.width)
         for actor in frame.actors:
             meters = distance(frame.local.position,actor.position)*.0254
             if meters > config.max_distance_m or (actor.team == frame.local.team and not config.teammates):

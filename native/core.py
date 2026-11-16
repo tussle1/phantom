@@ -7,6 +7,7 @@ import struct
 from typing import Protocol
 
 from .config import Config
+from .catalyst_aim import CatalystMovement
 from .schema import Profile
 
 Vec3 = tuple[float, float, float]
@@ -306,10 +307,12 @@ def choose_target(frame, config):
 
 
 class AimController:
-    def __init__(self):
+    def __init__(self, rng=None):
+        self.catalyst = CatalystMovement(rng)
         self.reset()
 
     def reset(self):
+        self.catalyst.reset()
         self.target = None
         self.velocity = [0.0,0.0]
         self.remainder = [0.0,0.0]
@@ -323,6 +326,9 @@ class AimController:
         if pawn != self.target:
             self.reset()
             self.target = pawn
+        if config.aim == 'catalyst':
+            return self.catalyst.step(delta,frame.sensitivity,config.mouse_yaw,
+                                      config.mouse_pitch,config.catalyst_smoothing)
         if config.aim == 'smooth':
             movement = []
             for i in range(2):

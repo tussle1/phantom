@@ -10,6 +10,7 @@ Implemented and tested:
 - C++ entity/bomb decoding against a sparse fabricated-memory fixture.
 - Windows-only runtime exports in `phantom/runtime.h` for direct in-process bomb capture and an opt-in Poppins timer overlay.
 - A capacity-bounded cosmetic-preference store for weapon definition, paint kit, seed, wear, and optional StatTrak.
+- A host-driven cosmetic controller that records baselines, applies values through an adapter, refreshes, and restores; tests use a fabricated adapter. It is not connected to CS2.
 - Windows CI build, CTest coverage, and DLL load/unload/export smoke testing.
 
 Not implemented or validated:
@@ -18,6 +19,8 @@ Not implemented or validated:
 - A working local cosmetic override/refresh path. `phantom_apply_cosmetics()` still returns `PHANTOM_NOT_INTEGRATED`; preferences are not written, networked, rendered, or applied.
 - Live CS2 validation of module offsets, field offsets, bomb-site mapping, overlay behavior, or lifecycle safety.
 - Inventory ownership changes or cosmetics visible to other players.
+
+The cosmetic controller in `phantom/cosmetics.h` requires a host-supplied adapter that resolves serial-bearing local weapon handles, verifies ownership on every operation, writes values, and refreshes materials on the game thread. It has no C ABI, no built-in adapter, no UI and does not make `phantom_apply_cosmetics()` operational.
 
 No anti-cheat compatibility or account safety is claimed. Treat the runtime adapter as unverified until it is tested in an isolated/offline environment against the exact target build.
 
