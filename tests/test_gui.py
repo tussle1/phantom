@@ -95,6 +95,41 @@ class GuiTests(unittest.TestCase):
         self.panel.select_page('Input')
         self.assertEqual(self.panel.appearance_palette['accent'], '#21aabb')
 
+    def test_presets_confirm_cancel_and_preserve_bindings(self):
+        from PySide6.QtWidgets import QMessageBox
+        self.panel.model.set_key('menu_toggle', 0x2D)
+        self.panel.select_page('Configs')
+        self.panel.preset_combo.setCurrentText('combined practice')
+        before = self.panel.model.document()
+        with patch('native.gui.QMessageBox.question', return_value=QMessageBox.StandardButton.No):
+            QTest.mouseClick(self.panel.preset_apply_button, Qt.MouseButton.LeftButton)
+        self.assertEqual(self.panel.model.document(), before)
+        appearance = self.panel.appearance
+        with patch('native.gui.QMessageBox.question', return_value=QMessageBox.StandardButton.Yes) as question:
+            QTest.mouseClick(self.panel.preset_apply_button, Qt.MouseButton.LeftButton)
+            self.assertEqual(question.call_args.args[-1], QMessageBox.StandardButton.No)
+        self.assertEqual(self.panel.model.config.aim, 'smooth')
+        self.assertTrue(self.panel.model.config.esp)
+        self.assertEqual(self.panel.model.config.keys['menu_toggle'], 0x2D)
+        self.assertEqual(self.panel.model.names(), [])
+        self.assertEqual(self.panel.name_edit.text(), 'combined-practice')
+        self.assertIs(self.panel.appearance, appearance)
+        self.panel.select_page('Aim')
+        self.assertEqual(self.panel.combos['priority_bone'].currentText(), 'chest')
+
+    def test_preset_is_blocked_while_worker_exists(self):
+        self.panel.select_page('Configs')
+        before = self.panel.model.document()
+        self.panel.session.process = object()
+        try:
+            with patch('native.gui.QMessageBox.question') as question:
+                self.panel.apply_selected_preset()
+                question.assert_not_called()
+            self.assertEqual(self.panel.model.document(), before)
+            self.assertIn('Stop the runtime', self.panel.message.text())
+        finally:
+            self.panel.session.process = None
+
     def test_version_is_displayed(self):
         self.assertTrue(any(label.text() == 'phantom v1.2.0' for label in self.panel.findChildren(QLabel)))
 

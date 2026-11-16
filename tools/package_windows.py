@@ -15,6 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from native.config import Config
 from native.version import __version__
+from native.presets import PRESETS, preset_document, preset_filename
 from native.schema import load_profile
 
 RUN = '''@echo off\r
@@ -34,6 +35,14 @@ INSTRUCTIONS = 'PHANTOM v'+__version__+''' - WINDOWS X64
 6. Rebind Menu toggle in Input; save in Configs to persist it.
 
 Poppins is bundled in the EXE; no system font installation is required.
+
+Presets: Configs > Built-in presets > select > Apply preset > confirm.
+Some practice presets ENABLE hold-key aim or trigger; read the description.
+Runtime must be stopped. Save a named config to persist applied settings.
+The presets/ directory also contains full default-binding JSON configs. To import
+one manually, copy it into your native configs folder, then load it in Configs.
+Imported JSON uses default keys/bones/calibration; GUI Apply preserves yours.
+No preset is live-tested, ban-safe, or an anti-cheat compatibility claim.
 
 Included:
   phantom-native.exe  - Windows x64 executable
@@ -98,6 +107,8 @@ def package(executable, output, revision):
         archive.writestr('RUN-ME.txt', INSTRUCTIONS)
         archive.writestr('CONFIG.example.json', json.dumps({'version': 1, 'settings': asdict(Config())}, indent=2))
         archive.writestr('BUILD.json', json.dumps(manifest, indent=2))
+        for name in PRESETS:
+            archive.writestr('presets/'+preset_filename(name), json.dumps(preset_document(name), indent=2))
     print(f'Packaged {output} ({output.stat().st_size:,} bytes); EXE SHA-256 {digest}')
     return manifest
 

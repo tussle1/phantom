@@ -9,6 +9,7 @@ import unittest
 import zipfile
 
 from tools.package_windows import check_pe, package
+from native.presets import PRESETS, preset_document, preset_filename
 
 
 class PackageTests(unittest.TestCase):
@@ -56,8 +57,11 @@ class PackageTests(unittest.TestCase):
         with zipfile.ZipFile(output) as archive:
             self.assertEqual(set(archive.namelist()), {
                 'phantom-native.exe', 'offset-profile.json', 'README.md', 'run.cmd',
-                'RUN-ME.txt', 'CONFIG.example.json', 'BUILD.json', 'FONT-LICENSE.txt'})
+                'RUN-ME.txt', 'CONFIG.example.json', 'BUILD.json', 'FONT-LICENSE.txt'} |
+                {'presets/'+preset_filename(name) for name in PRESETS})
             self.assertIsNone(archive.testzip())
+            for name in PRESETS:
+                self.assertEqual(json.loads(archive.read('presets/'+preset_filename(name))), preset_document(name))
             manifest = json.loads(archive.read('BUILD.json'))
             self.assertEqual(manifest['app_version'], '1.2.0')
             self.assertIn(b'v1.2.0', archive.read('RUN-ME.txt'))

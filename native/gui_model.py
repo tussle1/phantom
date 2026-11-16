@@ -5,6 +5,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 from .config import Config, config_path, load_config, save_config, validate_config
+from .presets import preset_config
 
 # label, config key, display multiplier, min, max, decimals, suffix
 SLIDERS = (
@@ -61,6 +62,11 @@ class SettingsModel:
     def load(self, name):
         config = load_config(config_path(self.directory, name))
         self.config, self.name = config, name
+        self.revision += 1
+
+    def apply_preset(self, name):
+        config = preset_config(name, self.config)
+        self.config = config
         self.revision += 1
 
     def names(self):

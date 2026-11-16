@@ -23,7 +23,8 @@ def record(output):
     from PySide6.QtCore import Qt, QTimer, QEvent, QPointF
     from PySide6.QtGui import QColor, QImage, QPainter, QPen, QEnterEvent
     from PySide6.QtTest import QTest
-    from PySide6.QtWidgets import QApplication
+    from PySide6.QtWidgets import QApplication, QMessageBox
+    from unittest.mock import patch
     from native.gui import ControlPanel
     from native.typography import ui_font
     from native.version import __version__
@@ -63,19 +64,41 @@ def record(output):
                 app.sendEvent(button, QEnterEvent(center, center, center) if enter else QEvent(QEvent.Type.Leave))
                 state['caption'] = 'soft hover highlights · no runtime started'
 
+            def theme(name):
+                panel.theme_combo.setCurrentText(name)
+                state['caption'] = name+' theme · live color preview'
+
+            def density(name):
+                panel.appearance_controls['spacing'].setCurrentText(name)
+                state['caption'] = name+' spacing · live layout preview'
+
+            def apply_preset(name):
+                panel.preset_combo.setCurrentText(name)
+                # Demo only: script the normal confirmation without blocking the
+                # frame timer in a nested modal loop. No game worker is started.
+                with patch('native.gui.QMessageBox.question', return_value=QMessageBox.StandardButton.Yes):
+                    click(panel.preset_apply_button, name+' · applied, not saved')
+
             actions = {
-                30: lambda: click(panel.toggles['esp'], 'smooth toggle motion and colors'),
-                55: lambda: click(panel.toggles['esp'], 'smooth toggle motion and colors'),
-                85: lambda: click(panel.tab_buttons['Visuals'], 'visuals · actual settings-page fade'),
-                130: lambda: click(panel.tab_buttons['Input'], 'input · custom bindings'),
-                175: lambda: click(panel.tab_buttons['Configs'], 'configs · local settings'),
-                220: lambda: click(panel.tab_buttons['Aim'], 'aim · settings-page transition'),
-                260: lambda: click(panel.more, 'compact overview'),
-                305: lambda: click(panel.more, 'expanded horizontal layout'),
-                345: lambda: hover(True),
-                370: lambda: hover(False),
-                390: lambda: hover(True),
-                415: lambda: hover(False),
+                30: lambda: click(panel.appearance_button, 'appearance · colors and layout'),
+                55: lambda: theme('midnight'),
+                95: lambda: theme('forest'),
+                130: lambda: density('compact'),
+                170: lambda: density('comfortable'),
+                205: lambda: click(panel.tab_buttons['Configs'], 'built-in configuration presets'),
+                235: lambda: apply_preset('esp minimal'),
+                280: lambda: click(panel.tab_buttons['Visuals'], 'minimal esp · health only, 100 m'),
+                325: lambda: click(panel.tab_buttons['Configs'], 'smooth aim practice preset'),
+                350: lambda: apply_preset('smooth aim practice'),
+                395: lambda: click(panel.tab_buttons['Aim'], 'smooth aim · 2 degree fov, 200 ms, chest'),
+                445: lambda: click(panel.tab_buttons['Configs'], 'combined settings preset'),
+                470: lambda: apply_preset('combined practice'),
+                520: lambda: click(panel.tab_buttons['Aim'], 'combined · smooth aim and detailed esp'),
+                565: lambda: click(panel.appearance_button, 'appearance stays separate from gameplay configs'),
+                590: lambda: theme('midnight'),
+                620: lambda: click(panel.more, 'compact overview'),
+                660: lambda: click(panel.more, 'expanded customization page'),
+                695: lambda: hover(True),
             }
             timer = QTimer()
             timer.setTimerType(Qt.TimerType.PreciseTimer)
@@ -89,7 +112,7 @@ def record(output):
             def frame():
                 try:
                     index = state['frame']
-                    if index >= 450:
+                    if index >= 720:
                         finish()
                         return
                     if index in actions:
@@ -114,7 +137,7 @@ def record(output):
                     painter.setPen(QColor('#9284ac'))
                     painter.setFont(ui_font(9))
                     painter.drawText(0, height-37, width, 26, Qt.AlignmentFlag.AlignCenter,
-                                     f'phantom v{__version__} · actual qt capture · no game connection')
+                                     f'phantom v{__version__} · scripted qt demo · no game connection')
                     painter.end()
                     encoder.stdin.write(bytes(canvas.constBits()))
                     state['frame'] += 1
@@ -134,10 +157,10 @@ def record(output):
                 raise RuntimeError('Video encoder timed out.')
             errors.seek(0)
             diagnostics = errors.read().decode(errors='replace')
-            if state['error'] is not None or code or state['frame'] != 450:
+            if state['error'] is not None or code or state['frame'] != 720:
                 output.unlink(missing_ok=True)
                 raise RuntimeError(f'GUI recording failed: {state["error"]}; {diagnostics}')
-            print(f'{output}: 450 actual Qt frames, 30 fps, 15 seconds, {width}x{height}')
+            print(f'{output}: 720 actual Qt frames, 30 fps, 24 seconds, {width}x{height}')
 
 
 if __name__ == '__main__':
