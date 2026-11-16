@@ -1,0 +1,26 @@
+name: Tests
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          architecture: x64
+      - name: Compile native modules
+        run: python -m compileall -q native phantom.py
+      - name: Test decoders, math, configs, and legacy API
+        run: python -m unittest discover -s tests -v
+      - name: Check Windows imports and INPUT ABI (no game access)
+        if: runner.os == 'Windows'
+        run: python -c "import ctypes; from native import windows; assert ctypes.sizeof(windows.INPUT) == 40"
