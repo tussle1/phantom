@@ -1,0 +1,2 @@
+# Qt Widgets only; no browser or Qt WebEngine dependency.
+PySide6-Essentials==6.8.3

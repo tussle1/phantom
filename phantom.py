@@ -4,19 +4,21 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import queue
+from dataclasses import asdict
 from pathlib import Path
 import struct
 import sys
 import time
 
-from native.config import config_path, load_config, save_config, Config, write_json
+from native.config import config_path, load_config, save_config, validate_config, Config, write_json
 from native.core import AimController, Decoder, JumpController, ReadError, TriggerController
 from native.schema import build_profile, download_profile, load_profile
 
 DATA = Path(os.environ.get('LOCALAPPDATA', Path.home()/'.config'))/'PhantomNative'
 
 
-def run(profile,config,path):
+def run(profile,config,path,control=None,stop_event=None,report=None):
     from native import windows as win
 
     if struct.calcsize('P') != 8:
@@ -28,19 +30,51 @@ def run(profile,config,path):
     previous_mode = config.aim if config.aim != 'off' else 'smooth'
     retry_at,last_tick = 0.0,time.perf_counter()
     last_status = None
+    revision = 0
+    published_config = None
+    last_config_report = 0.0
+    last_frame_report = 0.0
 
     def status(message):
         nonlocal last_status
         if message != last_status:
             print(message,flush=True)
             last_status = message
+            if report:
+                report({'kind': 'status', 'message': message})
 
     print('Native external runtime. Borderless/windowed CS2 is required for the overlay.')
     print('F6 ESP | F7 aim | F8 trigger | F5 radar | F9 reload | F10 save | End exit')
     print('Input is foreground-gated. Aim and trigger are disabled in new configs.')
     try:
         while overlay.pump():
+            if stop_event is not None and stop_event.is_set():
+                break
+            if control is not None:
+                latest = None
+                for _ in range(16):
+                    try:
+                        command = control.get_nowait()
+                    except queue.Empty:
+                        break
+                    if isinstance(command, dict) and command.get('kind') == 'config':
+                        latest = command
+                if latest is not None:
+                    try:
+                        replacement = validate_config({'version': 1, 'settings': latest['settings']})
+                        incoming_revision = latest.get('revision')
+                        if type(incoming_revision) is not int or incoming_revision < revision:
+                            raise ValueError('Outdated settings update.')
+                        config, revision = replacement, incoming_revision
+                        previous_mode = config.aim if config.aim != 'off' else previous_mode
+                        previous_keys = {name: win.held(vk) for name, vk in config.keys.items()}
+                        aim.reset();trigger.reset();jump = JumpController()
+                    except (ValueError, KeyError) as error:
+                        status(f'GUI settings rejected: {error}')
             now = time.perf_counter()
+            if report and (asdict(config) != published_config or now-last_config_report > .5):
+                published_config, last_config_report = asdict(config), now
+                report({'kind': 'settings', 'settings': published_config, 'revision': revision})
             dt,last_tick = now-last_tick,now
             keys = {name:win.held(vk) for name,vk in config.keys.items()}
             edges = {name:down and not previous_keys.get(name,False) for name,down in keys.items()}
@@ -125,6 +159,9 @@ def run(profile,config,path):
                 continue
             overlay.present(game,frame,config)
             status(f'Live reads: {len(frame.actors)} other players. Spotted-mask colors are not map visibility.')
+            if report and now-last_frame_report > .5:
+                report({'kind': 'frame', 'players': len(frame.actors)})
+                last_frame_report = now
             events = []
             dx,dy = aim.step(frame,config,keys['aim_hold'],dt)
             if dx or dy:
@@ -133,6 +170,8 @@ def run(profile,config,path):
                 events.extend((win.mouse(2),win.mouse(4)))
             if jump.step(frame,config,keys['jump_hold']):
                 events.extend((win.keyboard(0x20),win.keyboard(0x20,True)))
+            if stop_event is not None and stop_event.is_set():
+                break
             win.emit(events,game,process.pid)
             time.sleep(max(0,1/60-(time.perf_counter()-now)))
     finally:
@@ -153,6 +192,9 @@ def parser():
     result.add_argument('--update-offsets',action='store_true',help='Explicitly fetch a pinned profile from a2x/cs2-dumper.')
     result.add_argument('--ref',default='main',help='main or exact a2x/cs2-dumper commit SHA')
     result.add_argument('--import-dumps',type=Path,help='Directory containing offsets.json and client_dll.json; requires --ref SHA.')
+    result.add_argument('--screenshot-dir',type=Path,help='Render control-panel screenshots, then exit without starting the runtime.')
+    result.add_argument('--gui',action='store_true',help='Open the native control panel without attaching until Start is clicked.')
+    result.add_argument('--headless',action='store_true',help='Run the runtime directly, without the control panel.')
     result.add_argument('--check-profile',action='store_true',help='Validate profile structure only; not a live compatibility check.')
     return result
 
@@ -199,8 +241,11 @@ def main(argv=None):
             print(f'Valid profile structure: a2x/cs2-dumper@{profile.source}')
             print('This does not test live game offsets, entity layout, bone mapping, or Windows APIs.')
             return 0
+        if args.gui or args.screenshot_dir is not None or (sys.platform == 'win32' and not args.headless):
+            from native.gui import launch
+            return launch(args.profile, args.config_dir, args.config, screenshots=args.screenshot_dir)
         if sys.platform != 'win32':
-            raise OSError('The native runtime requires 64-bit Windows. Config/profile tools and tests are cross-platform.')
+            raise OSError('The native runtime requires 64-bit Windows. Use --gui to preview the panel, or run config/profile tools.')
         profile = load_profile(args.profile)
         if not path.exists():
             save_config(path,Config())
@@ -210,11 +255,13 @@ def main(argv=None):
         return 0
     except KeyboardInterrupt:
         return 0
-    except (OSError,ValueError,KeyError,TypeError) as error:
+    except (OSError,ValueError,KeyError,TypeError,ImportError) as error:
         print(f'Phantom: {error}',file=sys.stderr)
-        print('Setup: py -3 phantom.py --update-offsets, then py -3 phantom.py --init-config',file=sys.stderr)
+        print('Setup: py -3 -m pip install -r requirements-gui.txt; py -3 phantom.py --update-offsets',file=sys.stderr)
         return 1
 
 
 if __name__ == '__main__':
+    import multiprocessing
+    multiprocessing.freeze_support()
     raise SystemExit(main())

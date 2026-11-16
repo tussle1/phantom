@@ -6,17 +6,19 @@ Standalone **64-bit Windows** external runtime using `ReadProcessMemory`, a clic
 
 ## Start
 
-Install **64-bit Python 3.11+**. No third-party runtime packages are required.
+Install **64-bit Python 3.11+**. The control panel uses Qt Widgets (PySide6 Essentials); the optional `--headless` runtime remains standard-library only.
 
 ```powershell
+py -3 -m pip install -r requirements-gui.txt
+
 # Explicit setup: fetch a consistent, commit-pinned a2x/cs2-dumper profile.
 py -3 phantom.py --update-offsets
 
-# Run the native runtime. The default config is created if missing.
+# Open the native control panel. Click Start runtime to attach.
 py -3 phantom.py
 ```
 
-After setup, `start-windows.cmd` runs the same native entry point. Use borderless/windowed CS2: the external overlay does not support exclusive fullscreen. The process waits for `cs2.exe`; memory access failures or invalid frames suppress drawing/input instead of substituting sample data. Aim and trigger are off in newly created configs.
+After setup, `start-windows.cmd` opens the same native control panel on Windows. Use `--headless` to run directly without a panel. Use borderless/windowed CS2: the external overlay does not support exclusive fullscreen. After Start is clicked, its separate worker waits for `cs2.exe`; memory access failures or invalid frames suppress drawing/input instead of substituting sample data. Aim and trigger are off in newly created configs.
 
 There is no synthetic fallback in the native runtime. The legacy preview remains in `companion.py`/`web/`, but is not imported or launched by `phantom.py`.
 
@@ -42,6 +44,36 @@ py -3 phantom.py --check-profile
 
 `--check-profile` checks file structure only, not the running game. Missing schema fields reject the profile. There is no signature scanner or guessed substitute offset.
 
+## Native control panel
+
+The panel recreates the supplied reference's compact dark-purple layout, pink pill toggles,
+outlined sliders, faceted purple tabs, banner, collapsible **More / Less** section, and
+cyan/pink action buttons. It uses native Qt Widgets, not HTML, a browser, or WebEngine.
+The banner is cropped from the user-supplied reference image; the controls and artwork
+buttons are drawn by Qt. Labels and controls are adapted to the implemented CS2 settings,
+not the rhythm-game autoplay controls in the reference.
+
+- **Visuals:** skeleton, health/armor bars, teammates, radar, spectators, range.
+- **Aim:** mode, priority bone, smoothing, angular FOV, speed and linear prediction.
+- **Input:** movement preference and real key/mouse binding capture; Escape cancels.
+- **Configs:** validated named save/load and an explicit offset-profile file picker.
+
+Changes are sent to the running native worker over bounded IPC, without blocking the UI.
+**Start runtime** saves the active configuration and launches the worker; **Stop** signals
+it to clean up its overlay and process handle. Closing the panel also stops its worker,
+with a three-second watchdog for an unresponsive process. The panel itself never performs
+memory reads or sends game input. Save in Configs keeps edits made while stopped.
+
+The window can be previewed without Windows/game access if Qt and platform libraries are installed:
+
+```sh
+python phantom.py --gui --profile native/profiles/reference-26598758.json
+QT_QPA_PLATFORM=offscreen python phantom.py --gui --screenshot-dir artifacts/ui --profile native/profiles/reference-26598758.json
+```
+
+The second command captures the actual control panel, not a game/overlay screenshot.
+Starting the native worker still requires Windows. Opening the panel does not attach to CS2.
+
 ## Native implementation scope
 
 | Part | What the code does | Important boundary |
@@ -54,9 +86,9 @@ py -3 phantom.py --check-profile
 | Bunny hop | Optional grounded transition → Space press/release | Disabled by default. No server compatibility guarantee. |
 | Radar | Player-centered circular radar rotated by local yaw | No map texture, parsing, or height-layer model. |
 | Spectators | Resolve observer services/target handles back to the local pawn | Only actors resolvable from the sampled entity list. |
-| Configs/hotkeys | Named atomic JSON configs; configurable Windows virtual-key bindings; live reload/save | Native settings are separate from legacy browser configs. No menu window. |
+| Configs/hotkeys | Named atomic JSON configs; configurable Windows virtual-key bindings; live reload/save | Native Qt control panel with live settings; separate from legacy browser configs. |
 
-**Not implemented:** silent aim, map parsing, per-bone visible fallback, anti-recoil, in-game GlowV2, sound ESP, bomb/defuse countdowns, grenade lineups, POV changes, no-spread, no-flash, no-smoke, third person, bullet tracers, hitmarkers, and an interactive ESP editor. Unsupported settings are rejected rather than offered as nonfunctional switches. No FliXxCZ code is included or implied.
+**Not implemented:** silent aim, map parsing, per-bone visible fallback, anti-recoil, in-game GlowV2, sound ESP, bomb/defuse countdowns, grenade lineups, POV changes, no-spread, no-flash, no-smoke, third person, bullet tracers, hitmarkers, and an in-game visual-layout/bone editor. The panel edits implemented ESP preferences. Unsupported settings are rejected rather than offered as nonfunctional switches. No FliXxCZ code is included or implied.
 
 ## Controls and configurations
 
@@ -83,7 +115,7 @@ py -3 phantom.py --list-configs
 py -3 phantom.py --config practice
 ```
 
-Edit a native JSON config in a text editor, then F9 to reload. `aim` accepts `off`, `smooth`, or `hardlock`; `priority_bone` accepts `head`, `neck`, `chest`, or `pelvis`. `prediction_ms` defaults to zero. `keys` contains numeric Windows virtual-key codes. `bones` contains configurable model-specific bone indices. There is no automatic model skeleton discovery.
+Use the control panel, or edit a native JSON config in a text editor and press F9 while the runtime is active to reload. `aim` accepts `off`, `smooth`, or `hardlock`; `priority_bone` accepts `head`, `neck`, `chest`, or `pelvis`. `prediction_ms` defaults to zero. `keys` contains numeric Windows virtual-key codes. `bones` contains configurable model-specific bone indices. There is no automatic model skeleton discovery.
 
 Mouse conversion assumes the configured `mouse_yaw` and `mouse_pitch` (both default 0.022), the memory-read sensitivity, and ordinary mouse input. Scoped sensitivity, game input settings, Windows mouse acceleration, or blocked synthetic input can make it inaccurate. Foreground is checked before sampling and again before emitting input; no global aim/fire loop is allowed to run against another foreground process.
 
@@ -94,11 +126,11 @@ Entity chunk parameters and candidate strides live in the profile's `layout` blo
 On Windows:
 
 ```powershell
-py -3 -m pip install pyinstaller
+py -3 -m pip install pyinstaller -r requirements-gui.txt
 build-native.cmd
 ```
 
-This produces `dist\phantom-native.exe`. Run `phantom-native.exe --update-offsets` before normal launch. The GitHub Windows package pipeline also produces an executable with CLI smoke checks. Config/profile files stay outside the executable; live gameplay remains unverified.
+This produces the windowed GUI executable `dist\phantom-native.exe`. Run `phantom-native.exe --update-offsets` before normal launch. The GitHub Windows package pipeline also produces an executable with CLI smoke checks. Config/profile files stay outside the executable; live gameplay remains unverified.
 
 ## Tests
 
@@ -112,9 +144,10 @@ The native suite exercises a sparse fabricated-memory fixture through entity tra
 ### Downloadable Windows ZIP
 
 The **Windows package** GitHub Actions workflow builds on a Windows x64 runner,
-checks Win32 imports/ABI, smoke-tests the executable's CLI, and uploads a
+checks Win32 imports/ABI, tests actual Qt controls, smoke-tests the executable and
+captures its compact/expanded control panel, then uploads a
 `phantom-windows-x64` artifact, downloadable as a ZIP with the files at its root (no nested ZIP).
 The ZIP contains the EXE, pinned reference profile, a `run.cmd` launcher,
-configuration example, instructions, and a source revision/EXE SHA-256 manifest.
+configuration example, instructions, actual control-panel screenshots, and a source revision/EXE SHA-256 manifest.
 Extract the complete ZIP and double-click `run.cmd`; Python is not required.
 A successful package build is not a live-game compatibility test.
