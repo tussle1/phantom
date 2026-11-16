@@ -34,11 +34,11 @@ jobs:
         shell: pwsh
         run: |
           cmake -S cpp -B build-cpp -A x64 2>&1 | Tee-Object -FilePath cpp-build.log
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if ($LASTEXITCODE -ne 0) { Write-Output "::error::CMake configure failed"; exit $LASTEXITCODE }
           cmake --build build-cpp --config Release 2>&1 | Tee-Object -FilePath cpp-build.log -Append
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if ($LASTEXITCODE -ne 0) { Get-Content cpp-build.log | Select-Object -Last 20 | ForEach-Object { Write-Output "::error::$_" }; exit $LASTEXITCODE }
           ctest --test-dir build-cpp -C Release --output-on-failure 2>&1 | Tee-Object -FilePath cpp-build.log -Append
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if ($LASTEXITCODE -ne 0) { Get-Content cpp-build.log | Select-Object -Last 30 | ForEach-Object { Write-Output "::error::$_" }; exit $LASTEXITCODE }
       - name: Upload C++ failure log
         if: failure()
         uses: actions/upload-artifact@v4
