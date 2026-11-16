@@ -9,6 +9,7 @@ from unittest.mock import patch
 try:
     from PySide6.QtCore import Qt
     from PySide6.QtTest import QTest
+    from PySide6.QtGui import QFontInfo, QFontMetrics
     from PySide6.QtWidgets import QApplication
     from native.gui import ControlPanel
     QT_AVAILABLE = True
@@ -33,6 +34,53 @@ class GuiTests(unittest.TestCase):
         self.panel.close()
         self.app.processEvents()
         self.temp.cleanup()
+
+    def test_poppins_is_loaded_and_ui_text_has_real_glyphs(self):
+        from native.typography import configure_fonts, ui_font, REQUIRED_TEXT
+        self.assertEqual(configure_fonts(), 'Poppins')
+        self.assertEqual(self.panel.font().family(), 'Poppins')
+        font = ui_font(10)
+        self.assertIn(QFontInfo(font).family(), ('Poppins', 'Poppins Regular'))
+        metrics = QFontMetrics(font)
+        self.assertTrue(all(metrics.inFontUcs4(ord(c)) for c in REQUIRED_TEXT))
+        self.assertGreater(metrics.horizontalAdvance('Phantom - Start runtime'), 0)
+
+    def test_menu_toggle_hides_reopens_and_controls_pause_state(self):
+        self.assertTrue(self.panel.isVisible())
+        self.assertTrue(self.panel.session.menu_visible)
+        self.panel.toggle_menu()
+        self.assertFalse(self.panel.isVisible())
+        self.assertFalse(self.panel.session.menu_visible)
+        self.assertTrue(self.panel.menu_timer.isActive())
+        self.panel.toggle_menu()
+        self.assertTrue(self.panel.isVisible())
+        self.assertTrue(self.panel.session.menu_visible)
+
+    def test_menu_hotkey_polls_even_without_a_runtime(self):
+        pressed = set()
+        self.panel.menu_hotkey.read_key = lambda vk: vk in pressed
+        self.panel.menu_hotkey.prime(0xA1)
+        pressed.add(0xA1);self.panel.poll_menu_hotkey()
+        self.assertFalse(self.panel.isVisible())
+        self.panel.poll_menu_hotkey()  # Held is not a second press.
+        self.assertFalse(self.panel.isVisible())
+        pressed.clear();self.panel.poll_menu_hotkey()
+        pressed.add(0xA1);self.panel.poll_menu_hotkey()
+        self.assertTrue(self.panel.isVisible())
+
+    def test_custom_menu_binding_persists_and_capture_does_not_hide_panel(self):
+        self.panel.select_page('Input')
+        button = self.panel.binding_buttons['menu_toggle']
+        self.assertEqual(button.text(), 'Right Shift')
+        self.panel.begin_capture('menu_toggle', button)
+        QTest.keyClick(button, Qt.Key.Key_F4)
+        self.assertEqual(self.panel.model.config.keys['menu_toggle'], 0x73)
+        self.assertEqual(button.text(), 'F4')
+        self.assertTrue(self.panel.isVisible())
+        self.panel.model.save()
+        from native.gui_model import SettingsModel
+        restored = SettingsModel(self.temp.name)
+        self.assertEqual(restored.config.keys['menu_toggle'], 0x73)
 
     def test_defaults_and_top_controls(self):
         self.assertFalse(self.panel.toggles['aim'].isChecked())

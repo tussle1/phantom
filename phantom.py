@@ -18,7 +18,7 @@ from native.schema import build_profile, download_profile, load_profile
 DATA = Path(os.environ.get('LOCALAPPDATA', Path.home()/'.config'))/'PhantomNative'
 
 
-def run(profile,config,path,control=None,stop_event=None,report=None):
+def run(profile,config,path,control=None,stop_event=None,report=None,pause_event=None):
     from native import windows as win
 
     if struct.calcsize('P') != 8:
@@ -81,6 +81,11 @@ def run(profile,config,path,control=None,stop_event=None,report=None):
             previous_keys = keys
             if edges['exit']:
                 break
+            if pause_event is not None and pause_event.is_set():
+                overlay.hide();aim.reset();trigger.reset();jump = JumpController()
+                status('Paused while menu is open. Hide the menu to resume.')
+                time.sleep(.025)
+                continue
             if process and not process.alive():
                 process.close()
                 process,decoder,game = None,None,None
@@ -172,6 +177,9 @@ def run(profile,config,path,control=None,stop_event=None,report=None):
                 events.extend((win.keyboard(0x20),win.keyboard(0x20,True)))
             if stop_event is not None and stop_event.is_set():
                 break
+            if pause_event is not None and pause_event.is_set():
+                aim.reset();trigger.reset();jump = JumpController()
+                continue
             win.emit(events,game,process.pid)
             time.sleep(max(0,1/60-(time.perf_counter()-now)))
     finally:
