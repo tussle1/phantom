@@ -107,6 +107,12 @@ def record(output):
     with tempfile.TemporaryDirectory(prefix='phantom-startup-') as config_dir:
         env = os.environ.copy()
         env.pop('QT_QPA_PLATFORM', None)
+        # GitHub's py launcher can select a different Python installation from
+        # the interpreter that installed the GUI dependencies. Keep the real
+        # .cmd entry point and bind its py -3 invocation to this interpreter.
+        shim = Path(config_dir)/'py.cmd'
+        shim.write_text('@echo off\r\n"' + sys.executable + '" "%~2" "%~3" "%~4" "%~5" "%~6"\r\n', encoding='utf-8')
+        env['PATH'] = config_dir + os.pathsep + env.get('PATH', '')
         process = subprocess.Popen(['cmd.exe', '/c', 'start-windows.cmd',
                                     '--profile', str(ROOT/'native/profiles/reference-26598758.json'),
                                     '--config-dir', config_dir], cwd=ROOT, env=env,
