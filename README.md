@@ -46,6 +46,16 @@ py -3 phantom.py --check-profile
 
 ## Native control panel
 
+### Screenshots (Poppins)
+
+Actual Qt control-panel captures from the Windows runner, without game access:
+
+| Expanded | Compact |
+| --- | --- |
+| ![Expanded native Poppins control panel](docs/screenshots/gui-expanded.png) | ![Compact native Poppins control panel](docs/screenshots/gui-compact.png) |
+
+These show the settings panel only, not a live game/overlay capture.
+
 The panel recreates the supplied reference's compact dark-purple layout, pink pill toggles,
 outlined sliders, faceted purple tabs, banner, collapsible **More / Less** section, and
 cyan/pink action buttons. It uses native Qt Widgets, not HTML, a browser, or WebEngine.
