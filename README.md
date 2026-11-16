@@ -114,6 +114,28 @@ buttons ease their hover highlight over 140 ms, and settings pages fade in over
 and settings changes are applied immediately. Rapid changes reverse/restart from
 the current visual state, and closing the panel stops active animations.
 
+### GUI customization
+
+Click **appearance** in the title bar (available in compact and expanded modes).
+Choose phantom, midnight, forest, or graphite; customize the accent and background
+using the native color picker; and select compact or comfortable spacing. Colors
+and density preview immediately, including painted toggles, buttons, and icons.
+Text/surface colors adapt to the chosen background. The logo and banner artwork
+are not recolored.
+
+Choose **interface scale** (80%, 90%, 100%, 110%, 125%, or 150%) and your preferred
+compact/expanded startup view, then click **save appearance**. Whole-interface
+scaling applies on the next launch, using Qt's high-DPI support; an explicitly
+provided `QT_SCALE_FACTOR` environment variable takes priority. Small logical
+desktops get workspace scrollbars so controls remain reachable.
+
+Appearance is stored separately in
+`%LOCALAPPDATA%/PhantomNative/configs/.ui-preferences.json` (or your custom
+`--config-dir`). It is not sent to the worker or changed by loading named gameplay
+configs. **reset appearance** previews the defaults; save to persist the reset.
+Invalid UI preference files produce a warning and defaults, without overwriting
+the file until you explicitly save.
+
 ### Layout and typography
 
 The expanded panel uses a horizontal, two-column layout: overview and tabs on the

@@ -4,6 +4,7 @@ from __future__ import annotations
 from dataclasses import asdict
 from pathlib import Path
 import random
+import re
 import sys
 import time
 
@@ -11,7 +12,7 @@ from PySide6.QtCore import Qt, QTimer, Signal, QRectF, QPointF, QEvent, QVariant
 from PySide6.QtGui import QColor, QPainter, QPen, QLinearGradient, QPixmap, QPolygonF, QFont, QIcon
 from PySide6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QSlider, QDoubleSpinBox, QComboBox, QLineEdit, QFrame, QScrollArea,
-    QFileDialog, QMessageBox, QSizePolicy, QGraphicsOpacityEffect)
+    QFileDialog, QMessageBox, QSizePolicy, QGraphicsOpacityEffect, QColorDialog)
 
 from .gui_model import SettingsModel, SLIDERS
 from .schema import load_profile
@@ -19,6 +20,7 @@ from .session import RuntimeSession
 from .typography import configure_fonts, ui_font
 from .hotkeys import MenuHotkey, capture_vk
 from .version import __version__
+from . import appearance
 
 BG, DARK, INK, MUTED, PINK = '#272234', '#201a2b', '#c5b5f6', '#9284ac', '#fc589b'
 STYLE = '''
@@ -44,6 +46,10 @@ QPushButton:disabled { color: #82758f; }
 '''
 
 
+def theme_color(widget, name, fallback):
+    return getattr(widget.window(), 'appearance_palette', {}).get(name, fallback)
+
+
 class IconButton(QPushButton):
     def __init__(self, icon):
         super().__init__()
@@ -52,7 +58,7 @@ class IconButton(QPushButton):
     def paintEvent(self, event):
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        p.setPen(QPen(QColor('#f1e8ff' if self.underMouse() else MUTED), 1.4))
+        p.setPen(QPen(QColor(theme_color(self, 'ink' if self.underMouse() else 'muted', INK)), 1.4))
         x, y = self.width()/2, self.height()/2
         if self.icon == 'close':
             p.drawLine(QPointF(x-3,y-3),QPointF(x+3,y+3))
@@ -64,7 +70,7 @@ class IconButton(QPushButton):
             p.drawLine(QPointF(x+4,y-4),QPointF(x+4,y))
             p.drawLine(QPointF(x+4,y),QPointF(x,y))
         if self.hasFocus():
-            p.setPen(QPen(QColor(INK),1,Qt.PenStyle.DotLine))
+            p.setPen(QPen(QColor(theme_color(self, 'focus', INK)),1,Qt.PenStyle.DotLine))
             p.drawRect(1,1,self.width()-3,self.height()-3)
 
 
@@ -112,15 +118,15 @@ class Toggle(QPushButton):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         track = QRectF(2, 5, 24, 12)
-        painter.setPen(QPen(QColor(PINK), 1.5))
-        painter.setBrush(self.blend(BG, PINK))
+        painter.setPen(QPen(QColor(theme_color(self, 'accent', PINK)), 1.5))
+        painter.setBrush(self.blend(theme_color(self, 'background', BG), theme_color(self, 'accent', PINK)))
         painter.drawRoundedRect(track, 6, 6)
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(self.blend('#9987ad', '#fff5fc'))
         painter.drawEllipse(QPointF(8+12*self.position, 11), 3, 3)
         if self.hasFocus():
             painter.setBrush(Qt.BrushStyle.NoBrush)
-            painter.setPen(QPen(QColor(INK), 1, Qt.PenStyle.DotLine))
+            painter.setPen(QPen(QColor(theme_color(self, 'focus', INK)), 1, Qt.PenStyle.DotLine))
             painter.drawRoundedRect(QRectF(.5, .5, 28, 22), 4, 4)
 
 
@@ -160,7 +166,7 @@ class FacetButton(QPushButton):
     def paintEvent(self, event):
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        base = QColor(self.color)
+        base = QColor(theme_color(self, 'accent', self.color))
         if not self.isEnabled():
             base = base.darker(155)
         else:
@@ -180,15 +186,15 @@ class FacetButton(QPushButton):
                 p.drawPolygon(QPolygonF([QPointF(x,y), QPointF(x+35,y+12), QPointF(x+15,y+43)]))
         p.restore()
         if self.selected or self.hasFocus():
-            p.setPen(QPen(QColor('#dab9ff'), 1.5))
+            p.setPen(QPen(QColor(theme_color(self, 'focus', '#dab9ff')), 1.5))
             p.setBrush(Qt.BrushStyle.NoBrush)
             p.drawRoundedRect(QRectF(1,1,self.width()-2,self.height()-2), 3, 3)
-        p.setPen(QColor('#fff2ff'))
+        p.setPen(QColor(appearance.palette(appearance.Appearance(background=base.name()))['ink']))
         font = ui_font(13 if self.subtitle else 9)
         p.setFont(font)
         p.drawText(QRectF(0,5 if self.subtitle else 0,self.width(),25 if self.subtitle else self.height()), Qt.AlignmentFlag.AlignCenter, self.caption)
         if self.subtitle:
-            p.setPen(QColor('#dfcbe9'));p.setFont(ui_font(8))
+            p.setPen(QColor(appearance.palette(appearance.Appearance(background=base.name()))['ink']));p.setFont(ui_font(8))
             p.drawText(QRectF(0,31,self.width(),19), Qt.AlignmentFlag.AlignCenter, self.subtitle)
 
 
@@ -265,11 +271,13 @@ class ControlPanel(QWidget):
         super().__init__()
         self.profile_path = Path(profile)
         self.model = SettingsModel(config_dir, config_name)
+        self.appearance, appearance_warning = appearance.load(config_dir)
+        self.appearance_palette = appearance.palette(self.appearance)
         configure_fonts()
         QApplication.instance().setFont(ui_font(10))
         self.session = RuntimeSession()
         self.menu_hotkey = MenuHotkey()
-        self.page, self.expanded = 'Aim', True
+        self.page, self.expanded = 'Aim', self.appearance.start_expanded
         self.drag_origin = None
         self.closing = False
         self.capture = None
@@ -299,6 +307,10 @@ class ControlPanel(QWidget):
         self.logo_label.setPixmap(logo_small)
         self.logo_label.setToolTip('phantom')
         title.addWidget(self.logo_label);title.addWidget(QLabel('phantom v'+__version__));title.addStretch()
+        self.appearance_button = QPushButton('appearance')
+        self.appearance_button.setAccessibleName('GUI appearance')
+        self.appearance_button.clicked.connect(lambda: self.select_page('Appearance'))
+        title.addWidget(self.appearance_button)
         minimize = IconButton('minimize');minimize.setFixedSize(32,32);minimize.setAccessibleName('Minimize');minimize.clicked.connect(self.showMinimized)
         close = IconButton('close');close.setFixedSize(27,32);close.setAccessibleName('Close');close.clicked.connect(self.close)
         title.addWidget(minimize);title.addWidget(close);self.titlebar.setFixedHeight(36)
@@ -309,7 +321,10 @@ class ControlPanel(QWidget):
         self.overview = QWidget()
         overview_layout = QVBoxLayout(self.overview);overview_layout.setContentsMargins(0,0,0,0);overview_layout.setSpacing(0)
         columns.addWidget(self.overview)
-        outer.addWidget(self.workspace,1)
+        self.workspace_scroll = QScrollArea()
+        self.workspace_scroll.setWidgetResizable(True)
+        self.workspace_scroll.setWidget(self.workspace)
+        outer.addWidget(self.workspace_scroll,1)
         body = QWidget();body_layout = QVBoxLayout(body);body_layout.setContentsMargins(10,4,10,0);body_layout.setSpacing(0)
         self.hero = Hero();body_layout.addWidget(self.hero);body_layout.addSpacing(12)
         for spec in SLIDERS:
@@ -356,7 +371,100 @@ class ControlPanel(QWidget):
         self.capture_timer = QTimer(self);self.capture_timer.setSingleShot(True);self.capture_timer.timeout.connect(self.cancel_capture)
         self.menu_timer = QTimer(self);self.menu_timer.setInterval(16);self.menu_timer.timeout.connect(self.poll_menu_hotkey);self.menu_timer.start()
         self.build_details();self.refresh();self.update_session_buttons()
+        self.apply_appearance()
         self.resize_panel()
+        if appearance_warning:
+            self.message.setText(appearance_warning)
+
+    def apply_appearance(self):
+        self.appearance_palette = colors = appearance.palette(self.appearance)
+        roles = {
+            '#272234': 'background', '#201a2b': 'surface', '#1e1929': 'surface',
+            '#c5b5f6': 'ink', '#e6ddef': 'ink', '#eee7f6': 'ink', '#d4c4f9': 'ink',
+            '#9284ac': 'muted', '#77628f': 'muted', '#b9809d': 'muted', '#82758f': 'muted',
+            '#655278': 'border', '#3a304a': 'border', '#b49bf4': 'focus', '#bda6ff': 'focus',
+            '#7150a2': 'accent', '#7145a1': 'accent', '#382b49': 'surface', '#4b3c67': 'surface',
+        }
+        def themed(style):
+            return re.sub(r'#[0-9a-fA-F]{6}', lambda match: colors[roles[match[0].lower()]] if match[0].lower() in roles else match[0], style)
+        # Keep pristine inline styles so successive previews never compound.
+        for widget in [self]+self.findChildren(QWidget):
+            if not hasattr(widget, '_original_style'):
+                widget._original_style = widget.styleSheet()
+            widget.setStyleSheet(themed(widget._original_style))
+            widget.update()
+        compact = self.appearance.spacing == 'compact'
+        self.details_layout.setSpacing(2 if compact else 5)
+        self.details_layout.setContentsMargins(*((12,8,12,5) if compact else (18,13,18,7)))
+        self.hero.setFixedHeight(88 if compact else 104)
+        for row in self.findChildren(SliderRow):
+            row.setFixedHeight(24 if compact else 28)
+
+    def preview_appearance(self, key, value):
+        setattr(self.appearance, key, value)
+        self.apply_appearance()
+        self.resize_panel()
+
+    def choose_color(self, key):
+        chosen = QColorDialog.getColor(QColor(getattr(self.appearance,key)), self, 'Choose '+key)
+        if chosen.isValid():
+            self.preview_appearance(key, chosen.name())
+            self.color_buttons[key].setText(key+' · '+chosen.name())
+            self.theme_combo.blockSignals(True);self.theme_combo.setCurrentText('custom');self.theme_combo.blockSignals(False)
+
+    def choose_theme(self, name):
+        if name in appearance.PRESETS:
+            self.appearance.accent,self.appearance.background = appearance.PRESETS[name]
+            for key,button in self.color_buttons.items():
+                button.setText(key+' · '+getattr(self.appearance,key))
+            self.apply_appearance()
+
+    def save_appearance(self):
+        try:
+            appearance.save(self.model.directory, self.appearance)
+            self.message.setText('Appearance saved. Interface scale applies after restarting the app.')
+        except (OSError,ValueError) as error:
+            self.message.setText(str(error))
+
+    def reset_appearance(self):
+        self.appearance = appearance.Appearance()
+        self.build_details();self.apply_appearance();self.resize_panel()
+        self.message.setText('Default appearance restored in preview. Save appearance to keep it.')
+
+    def build_appearance(self):
+        self.section('APPEARANCE')
+        self.theme_combo = QComboBox()
+        self.theme_combo.setAccessibleName('Theme preset')
+        self.theme_combo.addItems([*appearance.PRESETS, 'custom'])
+        selected = next((name for name,(accent,bg) in appearance.PRESETS.items()
+                         if (accent,bg)==(self.appearance.accent,self.appearance.background)), 'custom')
+        self.theme_combo.setCurrentText(selected)
+        self.theme_combo.currentTextChanged.connect(self.choose_theme)
+        self.details_layout.addWidget(self.theme_combo)
+        self.color_buttons = {}
+        for key in ('accent','background'):
+            button = QPushButton(key+' · '+getattr(self.appearance,key))
+            button.setAccessibleName('Choose '+key+' color')
+            button.clicked.connect(lambda checked=False, key=key: self.choose_color(key))
+            self.details_layout.addWidget(button);self.color_buttons[key] = button
+        self.section('SIZE & LAYOUT')
+        self.appearance_controls = {}
+        choices = (
+            ('Interface scale', 'scale', [str(n)+'%' for n in appearance.SCALES], str(self.appearance.scale)+'%'),
+            ('Spacing', 'spacing', ['compact','comfortable'], self.appearance.spacing),
+            ('Open on startup', 'start_expanded', ['expanded','compact'], 'expanded' if self.appearance.start_expanded else 'compact'),
+        )
+        for label,key,values,current in choices:
+            row = QHBoxLayout();row.addWidget(QLabel(label))
+            combo = QComboBox();combo.addItems(values);combo.setCurrentText(current);combo.setAccessibleName(label)
+            combo.currentTextChanged.connect(lambda value,key=key: self.preview_appearance(key, int(value[:-1]) if key=='scale' else value=='expanded' if key=='start_expanded' else value))
+            row.addWidget(combo);self.details_layout.addLayout(row);self.appearance_controls[key] = combo
+        self.note('Colors and spacing preview live. Save, then restart for whole-interface scaling. An explicit QT_SCALE_FACTOR environment setting takes priority.')
+        row = QHBoxLayout()
+        for label,callback in [('Save appearance',self.save_appearance),('Reset appearance',self.reset_appearance)]:
+            button = QPushButton(label);button.clicked.connect(callback);row.addWidget(button)
+        self.details_layout.addLayout(row)
+        self.note('Appearance is separate from named gameplay configurations. The original logo and banner artwork keep their own colors.')
 
     def poll_menu_hotkey(self):
         app = QApplication.instance()
@@ -474,8 +582,10 @@ class ControlPanel(QWidget):
         width = min(980, available.width()-24) if available else 980
         # Keep the overview readable and let longer detail pages scroll.
         # On narrow desktops compact mode still uses the original small panel.
-        self.setFixedWidth(width if self.expanded else 440)
-        self.overview.setFixedWidth(min(440, width//2) if self.expanded else 440)
+        self.setFixedWidth(width if self.expanded else min(440,width))
+        self.overview.setFixedWidth(min(440, max(360,width//2)) if self.expanded else 440)
+        self.workspace.setMinimumWidth(self.overview.width()+340 if self.expanded else 440)
+        self.workspace.setMinimumHeight(410 if self.appearance.spacing=='compact' else 450)
         wanted = 600 if self.expanded else 558
         self.setFixedHeight(min(wanted, available.height()-24) if available else wanted)
 
@@ -513,7 +623,9 @@ class ControlPanel(QWidget):
 
     def build_details(self):
         self.clear_details()
-        if self.page=='Aim':
+        if self.page=='Appearance':
+            self.build_appearance()
+        elif self.page=='Aim':
             self.section('AIM TUNING')
             self.detail_combo('Aim mode','aim',['off','smooth','hardlock'])
             self.detail_combo('Priority bone','priority_bone',['head','neck','chest','pelvis'])
@@ -548,6 +660,7 @@ class ControlPanel(QWidget):
             browse=QPushButton('Choose profile JSON…');browse.setStyleSheet('background: #382b49; border: 1px solid #655278; border-radius: 3px; padding: 5px;');browse.clicked.connect(self.choose_profile);self.details_layout.addWidget(browse)
             self.note('Profile checks validate file structure, not live game compatibility. No offsets are downloaded silently.')
         self.details_layout.addStretch()
+        self.apply_appearance()
 
     def save_named(self):
         name=self.name_edit.text().strip()
@@ -657,6 +770,8 @@ class ControlPanel(QWidget):
 
 
 def launch(profile,config_dir,config_name='default',screenshots=None):
+    if QApplication.instance() is None:
+        appearance.configure_scale(config_dir)
     app=QApplication.instance() or QApplication([])
     try:
         panel=ControlPanel(profile,config_dir,config_name)
@@ -669,7 +784,7 @@ def launch(profile,config_dir,config_name='default',screenshots=None):
         def capture():
             try:
                 directory=Path(screenshots);directory.mkdir(parents=True,exist_ok=True)
-                panel.resize_panel();app.processEvents()
+                panel.expanded=True;panel.resize_panel();app.processEvents()
                 if panel.hero.image.isNull():
                     raise OSError('The bundled banner asset is missing.')
                 if not panel.grab().save(str(directory/'gui-expanded.png')):

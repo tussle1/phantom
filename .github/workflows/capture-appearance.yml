@@ -1,0 +1,56 @@
+name: Capture GUI customization
+on:
+  push:
+    branches: ['arena/9e3ef5bd-phantom']
+    paths: ['.github/workflows/capture-appearance.yml', 'native/appearance.py', 'native/gui.py', 'tests/test_gui.py']
+permissions:
+  contents: write
+jobs:
+  capture:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install -r requirements-gui.txt
+      - name: Test actual widgets
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: python tools/run_tests.py
+      - name: Capture base panel
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: python phantom.py --gui --profile native/profiles/reference-26598758.json --config-dir artifacts/preview --screenshot-dir docs/screenshots
+      - name: Capture customization page and prepare scale test
+        env:
+          QT_QPA_PLATFORM: offscreen
+        shell: python
+        run: |
+          from PySide6.QtWidgets import QApplication
+          from PySide6.QtTest import QTest
+          from native.gui import ControlPanel
+          from native.appearance import Appearance, save
+          app = QApplication([])
+          panel = ControlPanel('native/profiles/reference-26598758.json', 'artifacts/preview')
+          panel.show()
+          panel.select_page('Appearance')
+          panel.theme_combo.setCurrentText('midnight')
+          QTest.qWait(350)
+          assert panel.grab().save('docs/screenshots/gui-appearance.png')
+          panel.close()
+          save('artifacts/scale-preview', Appearance(scale=150))
+      - name: Exercise saved 150 percent scale before QApplication
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: python phantom.py --gui --profile native/profiles/reference-26598758.json --config-dir artifacts/scale-preview --screenshot-dir artifacts/scaled
+      - name: Save requested screenshots on working branch
+        shell: pwsh
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/screenshots/gui-expanded.png docs/screenshots/gui-compact.png docs/screenshots/gui-appearance.png
+          git commit -m "Capture actual customization page and refreshed GUI views"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          git push origin HEAD:arena/9e3ef5bd-phantom
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

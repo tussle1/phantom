@@ -54,6 +54,47 @@ class GuiTests(unittest.TestCase):
         self.assertFalse(self.panel.windowIcon().pixmap(16,16).isNull())
         self.assertFalse(self.panel.windowIcon().pixmap(256,256).isNull())
 
+    def test_appearance_preview_save_reopen_and_reset(self):
+        from native import appearance
+        original = self.panel.model.document()
+        QTest.mouseClick(self.panel.appearance_button, Qt.MouseButton.LeftButton)
+        self.assertEqual(self.panel.page, 'Appearance')
+        self.panel.theme_combo.setCurrentText('midnight')
+        self.assertEqual(self.panel.appearance_palette['accent'], '#69b8ff')
+        self.assertIn('#141e30', self.panel.styleSheet())
+        self.panel.appearance_controls['spacing'].setCurrentText('compact')
+        self.assertEqual(self.panel.hero.height(), 88)
+        self.panel.appearance_controls['scale'].setCurrentText('125%')
+        self.panel.appearance_controls['start_expanded'].setCurrentText('compact')
+        self.panel.save_appearance()
+        saved, warning = appearance.load(self.temp.name)
+        self.assertFalse(warning)
+        self.assertEqual(saved.scale, 125)
+        self.assertFalse(saved.start_expanded)
+        reopened = ControlPanel(self.panel.profile_path, self.temp.name)
+        self.addCleanup(reopened.close)
+        self.assertFalse(reopened.expanded)
+        self.assertEqual(reopened.appearance.background, '#141e30')
+        self.assertEqual(self.panel.model.document(), original)
+        self.panel.reset_appearance()
+        self.assertEqual(self.panel.appearance, appearance.Appearance())
+        self.assertEqual(self.panel.hero.height(), 104)
+        self.assertEqual(appearance.load(self.temp.name)[0], saved)  # Reset is preview until saved.
+
+    def test_custom_color_cancel_and_accept(self):
+        from PySide6.QtGui import QColor
+        self.panel.select_page('Appearance')
+        before = self.panel.appearance.accent
+        with patch('native.gui.QColorDialog.getColor', return_value=QColor()):
+            self.panel.choose_color('accent')
+        self.assertEqual(self.panel.appearance.accent, before)
+        with patch('native.gui.QColorDialog.getColor', return_value=QColor('#21aabb')):
+            self.panel.choose_color('accent')
+        self.assertEqual(self.panel.appearance.accent, '#21aabb')
+        self.assertEqual(self.panel.theme_combo.currentText(), 'custom')
+        self.panel.select_page('Input')
+        self.assertEqual(self.panel.appearance_palette['accent'], '#21aabb')
+
     def test_version_is_displayed(self):
         self.assertTrue(any(label.text() == 'phantom v1.2.0' for label in self.panel.findChildren(QLabel)))
 
@@ -106,7 +147,7 @@ class GuiTests(unittest.TestCase):
         self.assertGreater(self.panel.width(), self.panel.height())
         self.assertGreaterEqual(self.panel.details_scroll.x(), self.panel.overview.width())
         self.assertGreater(self.panel.details_scroll.width(), 300)
-        for page in ('Visuals', 'Aim', 'Input', 'Configs'):
+        for page in ('Visuals', 'Aim', 'Input', 'Configs', 'Appearance'):
             self.panel.select_page(page)
             self.app.processEvents()
             self.assertGreater(self.panel.width(), self.panel.height())
@@ -120,7 +161,7 @@ class GuiTests(unittest.TestCase):
     def test_lowercase_is_presentation_only(self):
         from native.typography import ui_font
         self.assertEqual(ui_font(10).capitalization(), QFont.Capitalization.AllLowercase)
-        for page in ('Visuals', 'Aim', 'Input', 'Configs'):
+        for page in ('Visuals', 'Aim', 'Input', 'Configs', 'Appearance'):
             self.panel.select_page(page)
             self.app.processEvents()
             for widget in self.panel.findChildren(QLabel) + self.panel.findChildren(QPushButton):
