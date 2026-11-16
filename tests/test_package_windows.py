@@ -59,6 +59,8 @@ class PackageTests(unittest.TestCase):
                 'RUN-ME.txt', 'CONFIG.example.json', 'BUILD.json', 'FONT-LICENSE.txt'})
             self.assertIsNone(archive.testzip())
             manifest = json.loads(archive.read('BUILD.json'))
+            self.assertEqual(manifest['app_version'], '1.2.0')
+            self.assertIn(b'v1.2.0', archive.read('RUN-ME.txt'))
             self.assertFalse(manifest['game_behavior_verified'])
             self.assertEqual(manifest['source_commit'], 'a'*40)
             self.assertEqual(manifest['executable_sha256'], hashlib.sha256(archive.read('phantom-native.exe')).hexdigest())

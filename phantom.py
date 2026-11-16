@@ -192,6 +192,8 @@ def run(profile,config,path,control=None,stop_event=None,report=None,pause_event
 
 def parser():
     result = argparse.ArgumentParser(description=__doc__)
+    from native.version import __version__
+    result.add_argument('--version', action='version', version='phantom '+__version__)
     result.add_argument('--profile',type=Path,default=DATA/'offset-profile.json')
     result.add_argument('--config-dir',type=Path,default=DATA/'configs')
     result.add_argument('--config',default='default',help='Named native config, without .json')

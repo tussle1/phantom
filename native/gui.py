@@ -7,17 +7,18 @@ import random
 import sys
 import time
 
-from PySide6.QtCore import Qt, QTimer, Signal, QRectF, QPointF, QEvent
+from PySide6.QtCore import Qt, QTimer, Signal, QRectF, QPointF, QEvent, QVariantAnimation, QPropertyAnimation, QEasingCurve
 from PySide6.QtGui import QColor, QPainter, QPen, QLinearGradient, QPixmap, QPolygonF, QFont, QIcon
 from PySide6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QSlider, QDoubleSpinBox, QComboBox, QLineEdit, QFrame, QScrollArea,
-    QFileDialog, QMessageBox, QSizePolicy)
+    QFileDialog, QMessageBox, QSizePolicy, QGraphicsOpacityEffect)
 
 from .gui_model import SettingsModel, SLIDERS
 from .schema import load_profile
 from .session import RuntimeSession
 from .typography import configure_fonts, ui_font
 from .hotkeys import MenuHotkey, capture_vk
+from .version import __version__
 
 BG, DARK, INK, MUTED, PINK = '#272234', '#201a2b', '#c5b5f6', '#9284ac', '#fc589b'
 STYLE = '''
@@ -72,19 +73,51 @@ class Toggle(QPushButton):
         super().__init__(parent)
         self.setCheckable(True)
         self.setChecked(checked)
+        self.position = float(checked)
+        self.motion = QVariantAnimation(self)
+        self.motion.setDuration(160)
+        self.motion.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self.motion.valueChanged.connect(self.set_position)
+        self.toggled.connect(self.animate_checked)
         self.setFixedSize(29, 23)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
+
+    def blend(self, start, end):
+        a, b = QColor(start), QColor(end)
+        return QColor.fromRgbF(*(a.getRgbF()[i]*(1-self.position)+b.getRgbF()[i]*self.position for i in range(4)))
+
+    def set_position(self, value):
+        self.position = float(value)
+        self.update()
+
+    def setChecked(self, checked):
+        super().setChecked(checked)
+        # Model refresh intentionally blocks signals; visuals must still follow.
+        if hasattr(self, 'motion'):
+            self.animate_checked(checked)
+
+    def animate_checked(self, checked):
+        target = float(checked)
+        if self.motion.endValue() == target and self.motion.state() == QVariantAnimation.State.Running:
+            return
+        self.motion.stop()
+        if abs(self.position-target) < 0.001:
+            self.set_position(target)
+            return
+        self.motion.setStartValue(self.position)
+        self.motion.setEndValue(target)
+        self.motion.start()
 
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         track = QRectF(2, 5, 24, 12)
         painter.setPen(QPen(QColor(PINK), 1.5))
-        painter.setBrush(QColor(PINK) if self.isChecked() else QColor(BG))
+        painter.setBrush(self.blend(BG, PINK))
         painter.drawRoundedRect(track, 6, 6)
         painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(QColor('#fff5fc') if self.isChecked() else QColor('#9987ad'))
-        painter.drawEllipse(QPointF(20 if self.isChecked() else 8, 11), 3, 3)
+        painter.setBrush(self.blend('#9987ad', '#fff5fc'))
+        painter.drawEllipse(QPointF(8+12*self.position, 11), 3, 3)
         if self.hasFocus():
             painter.setBrush(Qt.BrushStyle.NoBrush)
             painter.setPen(QPen(QColor(INK), 1, Qt.PenStyle.DotLine))
@@ -96,10 +129,33 @@ class FacetButton(QPushButton):
         super().__init__()
         self.caption, self.subtitle, self.color, self.seed = title, subtitle, color, seed
         self.selected = False
+        self.hover_progress = 0.0
+        self.hover_motion = QVariantAnimation(self)
+        self.hover_motion.setDuration(140)
+        self.hover_motion.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self.hover_motion.valueChanged.connect(self.set_hover_progress)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setMinimumHeight(58 if subtitle else 26)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.setAccessibleName(title)
+
+    def set_hover_progress(self, value):
+        self.hover_progress = float(value)
+        self.update()
+
+    def animate_hover(self, target):
+        self.hover_motion.stop()
+        self.hover_motion.setStartValue(self.hover_progress)
+        self.hover_motion.setEndValue(target)
+        self.hover_motion.start()
+
+    def enterEvent(self, event):
+        self.animate_hover(1.0)
+        super().enterEvent(event)
+
+    def leaveEvent(self, event):
+        self.animate_hover(0.0)
+        super().leaveEvent(event)
 
     def paintEvent(self, event):
         p = QPainter(self)
@@ -107,8 +163,8 @@ class FacetButton(QPushButton):
         base = QColor(self.color)
         if not self.isEnabled():
             base = base.darker(155)
-        elif self.underMouse():
-            base = base.lighter(108)
+        else:
+            base = base.lighter(100+round(8*self.hover_progress))
         p.setPen(Qt.PenStyle.NoPen)
         p.setBrush(base)
         p.drawRoundedRect(self.rect(), 3, 3)
@@ -229,7 +285,7 @@ class ControlPanel(QWidget):
         self.titlebar = QWidget();self.titlebar.setObjectName('titlebar');self.titlebar.setStyleSheet('#titlebar { background: #201a2b; }')
         title = QHBoxLayout(self.titlebar);title.setContentsMargins(11,0,8,0);title.setSpacing(7)
         icon = QLabel('p');icon.setAlignment(Qt.AlignmentFlag.AlignCenter);icon.setFixedSize(16,16);icon.setStyleSheet('background: #ef68a7; border: 1px solid #ffa6cd; border-radius: 8px; color: white; font-size: 10px;')
-        title.addWidget(icon);title.addWidget(QLabel('Phantom v0.3.0'));title.addStretch()
+        title.addWidget(icon);title.addWidget(QLabel('phantom v'+__version__));title.addStretch()
         minimize = IconButton('minimize');minimize.setFixedSize(32,32);minimize.setAccessibleName('Minimize');minimize.clicked.connect(self.showMinimized)
         close = IconButton('close');close.setFixedSize(27,32);close.setAccessibleName('Close');close.clicked.connect(self.close)
         title.addWidget(minimize);title.addWidget(close);self.titlebar.setFixedHeight(36)
@@ -270,6 +326,12 @@ class ControlPanel(QWidget):
         self.details_scroll = QScrollArea();self.details_scroll.setWidgetResizable(True);self.details_scroll.setWidget(self.details);self.details_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.details_scroll.setStyleSheet('QScrollArea { border-left: 1px solid #3a304a; }')
         columns.addWidget(self.details_scroll,1)
+        self.details_opacity = QGraphicsOpacityEffect(self.details)
+        self.details_opacity.setOpacity(1.0)
+        self.details.setGraphicsEffect(self.details_opacity)
+        self.page_motion = QPropertyAnimation(self.details_opacity, b'opacity', self)
+        self.page_motion.setDuration(180)
+        self.page_motion.setEasingCurve(QEasingCurve.Type.OutCubic)
         self.message = QLabel('Changes apply to the running session. Save keeps them on disk.');self.message.setWordWrap(True);self.message.setFixedHeight(39);self.message.setContentsMargins(18,0,18,0);self.message.setStyleSheet('font-size: 11px; color: #9284ac;')
         outer.addWidget(self.message)
         footer = QWidget();footer.setStyleSheet('background: #201a2b;');buttons = QHBoxLayout(footer);buttons.setContentsMargins(10,8,10,10);buttons.setSpacing(6)
@@ -373,11 +435,23 @@ class ControlPanel(QWidget):
             self.hero.profile = 'Select an offset profile in Configs'
         self.hero.update()
 
+    def fade_details(self):
+        self.page_motion.stop()
+        self.page_motion.setStartValue(0.25)
+        self.page_motion.setEndValue(1.0)
+        self.page_motion.start()
+
     def select_page(self,name):
         self.page,self.expanded = name,True;self.build_details();self.resize_panel();self.refresh()
+        self.fade_details()
 
     def toggle_more(self):
         self.expanded = not self.expanded;self.resize_panel();self.refresh()
+        if self.expanded:
+            self.fade_details()
+        else:
+            self.page_motion.stop()
+            self.details_opacity.setOpacity(1.0)
 
     def resize_panel(self):
         self.more.setText('Less' if self.expanded else 'More')
@@ -563,7 +637,10 @@ class ControlPanel(QWidget):
         self.cancel_capture()
         if self.session.process is not None:
             self.closing=True;self.stop_runtime();event.ignore();return
-        self.timer.stop();self.menu_timer.stop();self.apply_timer.stop();event.accept()
+        self.timer.stop();self.menu_timer.stop();self.apply_timer.stop()
+        for motion in self.findChildren(QVariantAnimation):
+            motion.stop()
+        event.accept()
 
 
 def launch(profile,config_dir,config_name='default',screenshots=None):
@@ -590,5 +667,5 @@ def launch(profile,config_dir,config_name='default',screenshots=None):
                 panel.close();app.exit(0)
             except (OSError,ValueError):
                 panel.close();app.exit(1)
-        QTimer.singleShot(150,capture)
+        QTimer.singleShot(250,capture)
     return app.exec()

@@ -14,6 +14,7 @@ import zipfile
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from native.config import Config
+from native.version import __version__
 from native.schema import load_profile
 
 RUN = '''@echo off\r
@@ -23,7 +24,7 @@ set "RESULT=%ERRORLEVEL%"\r
 if not "%RESULT%"=="0" pause\r
 exit /b %RESULT%\r
 '''
-INSTRUCTIONS = '''PHANTOM - WINDOWS X64
+INSTRUCTIONS = 'PHANTOM v'+__version__+''' - WINDOWS X64
 
 1. Extract the entire ZIP into a folder. Do not run from inside the ZIP.
 2. Double-click run.cmd to open the native control panel. No Python is required.
@@ -84,7 +85,7 @@ def package(executable, output, revision):
     profile = ROOT/'native/profiles/reference-26598758.json'
     load_profile(profile)
     digest = hashlib.sha256(executable.read_bytes()).hexdigest()
-    manifest = {'source_commit': revision, 'platform': 'windows-x64',
+    manifest = {'app_version': __version__, 'source_commit': revision, 'platform': 'windows-x64',
                 'executable_sha256': digest, 'game_behavior_verified': False}
     output.parent.mkdir(parents=True, exist_ok=True)
     # All names are fixed, relative paths. No checkout, secrets, or caches enter the ZIP.

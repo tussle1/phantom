@@ -81,6 +81,15 @@ python phantom.py --gui --profile native/profiles/reference-26598758.json
 QT_QPA_PLATFORM=offscreen python phantom.py --gui --screenshot-dir artifacts/ui --profile native/profiles/reference-26598758.json
 ```
 
+### v1.2.0 — animated interface
+
+The release version is shown in the title bar, `phantom-native.exe --version`,
+and the ZIP's `BUILD.json`. Toggle thumbs and colors ease over 160 ms, facet
+buttons ease their hover highlight over 140 ms, and settings pages fade in over
+180 ms when switching tabs or expanding. Animations are presentation-only: input
+and settings changes are applied immediately. Rapid changes reverse/restart from
+the current visual state, and closing the panel stops active animations.
+
 ### Layout and typography
 
 The expanded panel uses a horizontal, two-column layout: overview and tabs on the
