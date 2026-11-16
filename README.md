@@ -54,9 +54,11 @@ py -3 phantom.py --check-profile
 
 ### GUI animation clip
 
-[Watch the 15-second GUI demo (MP4)](docs/demos/gui-demo.mp4).
+[Watch the 24-second GUI demo (MP4)](docs/demos/gui-demo.mp4).
 This records actual offscreen Qt frames on Windows at 30 fps, not a mock-up or
-in-game footage. Captions and click rings are annotations; the panel rendering
+in-game footage. It shows theme/density customization, preset application, aim/ESP
+settings, and compact/expanded views. Preset confirmations are auto-accepted by the
+demo script only; the normal application always asks before applying a preset. Captions and click rings are annotations; the panel rendering
 and animations come from the real widgets. No game worker is started.
 
 To record again with optional developer dependencies:
@@ -113,6 +115,36 @@ buttons ease their hover highlight over 140 ms, and settings pages fade in over
 180 ms when switching tabs or expanding. Animations are presentation-only: input
 and settings changes are applied immediately. Rapid changes reverse/restart from
 the current visual state, and closing the panel stops active animations.
+
+### Built-in gameplay configuration presets
+
+Open **Configs → built-in presets**, read the description, then click **apply
+preset** and confirm. The runtime must be stopped. This replaces feature settings
+in memory, but preserves your keybinds, bone map, mouse calibration, and GUI
+appearance. It neither starts the runtime nor saves/overwrites any file.
+Use **save named config** to keep the result; the name field suggests a new preset
+filename. Unknown presets are rejected transactionally.
+
+| Preset | Settings |
+| --- | --- |
+| defaults | Original defaults; aim, trigger and bunny hop off |
+| esp minimal | Health-only ESP, 100 m; skeleton/armor/radar/spectators off; no input automation |
+| esp detailed | Skeleton, health, armor, radar and spectators; 250 m; no input automation |
+| smooth aim practice | **Enables hold-key smooth aim**: 2° FOV, 200 ms smoothing, 60°/s cap, chest; ESP/radar/spectators off |
+| combined practice | **Enables hold-key smooth aim**: 3° FOV, 150 ms smoothing, 75°/s cap, chest; detailed ESP at 150 m |
+| trigger practice | **Enables hold-key trigger**, 250 ms delay; health-only ESP at 100 m; aim off |
+
+Prediction and bunny hop are off in every built-in preset. These are editable
+starting points, not live-tested, ban-safe, or anti-cheat-compatible profiles.
+All existing runtime limitations still apply.
+
+The Windows ZIP includes complete JSON files under `presets/`. To import one,
+copy it into your native config directory and load it in Configs. **Those files
+contain default keybinds/bone indices/calibration**; unlike GUI Apply, importing a
+full JSON replaces those values too. Do not overwrite a personal config unless
+that is intended.
+
+[View the presets page](docs/screenshots/gui-presets.png).
 
 ### GUI customization
 

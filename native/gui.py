@@ -21,6 +21,7 @@ from .typography import configure_fonts, ui_font
 from .hotkeys import MenuHotkey, capture_vk
 from .version import __version__
 from . import appearance
+from .presets import PRESETS, preset_filename
 
 BG, DARK, INK, MUTED, PINK = '#272234', '#201a2b', '#c5b5f6', '#9284ac', '#fc589b'
 STYLE = '''
@@ -568,6 +569,7 @@ class ControlPanel(QWidget):
 
     def select_page(self,name):
         self.page,self.expanded = name,True;self.build_details();self.resize_panel();self.refresh()
+        self.details_scroll.verticalScrollBar().setValue(0)
         self.fade_details()
 
     def toggle_more(self):
@@ -653,6 +655,16 @@ class ControlPanel(QWidget):
                 button.clicked.connect(lambda checked=False,name=key,b=button:self.begin_capture(name,b));row.addWidget(button);self.binding_buttons[key]=button;self.details_layout.addLayout(row)
             self.note('Click a binding, then press a key or mouse button. Right Shift opens/closes the menu by default. Escape cancels. Save in Configs to keep changes.')
         else:
+            self.section('BUILT-IN PRESETS')
+            self.preset_combo = QComboBox();self.preset_combo.addItems(list(PRESETS));self.preset_combo.setAccessibleName('Built-in preset')
+            self.details_layout.addWidget(self.preset_combo)
+            self.preset_description = QLabel(PRESETS[self.preset_combo.currentText()][0]);self.preset_description.setWordWrap(True)
+            self.preset_description.setStyleSheet('font-size: 11px; color: #9284ac;')
+            self.details_layout.addWidget(self.preset_description)
+            self.preset_combo.currentTextChanged.connect(lambda name: self.preset_description.setText(PRESETS[name][0]))
+            self.preset_apply_button = QPushButton('Apply preset…');self.preset_apply_button.setAccessibleName('Apply built-in preset')
+            self.preset_apply_button.clicked.connect(self.apply_selected_preset);self.details_layout.addWidget(self.preset_apply_button)
+            self.note('Presets replace feature settings but keep your keybinds, bone map and mouse calibration. Stop runtime first. Apply is unsaved until you save a named config.')
             self.section('LOCAL CONFIGURATIONS')
             self.name_edit=QLineEdit(self.model.name);self.name_edit.setPlaceholderText('Configuration name');self.name_edit.setMaxLength(40);self.name_edit.setAccessibleName('Configuration name');self.details_layout.addWidget(self.name_edit)
             row=QHBoxLayout();save=QPushButton('Save named config');save.setStyleSheet('background: #7145a1; color: white; border-radius: 3px; padding: 6px;');save.clicked.connect(self.save_named);row.addWidget(save)
@@ -665,6 +677,26 @@ class ControlPanel(QWidget):
             self.note('Profile checks validate file structure, not live game compatibility. No offsets are downloaded silently.')
         self.details_layout.addStretch()
         self.apply_appearance()
+
+    def apply_selected_preset(self):
+        if self.session.process is not None:
+            self.message.setText('Stop the runtime before applying a preset.');return
+        name = self.preset_combo.currentText()
+        text = (PRESETS[name][0]+'\n\nReplace current feature settings, including unsaved changes? '
+                'Keybinds, bone map, mouse calibration and appearance are preserved. '
+                'Aim/trigger practice presets enable hold-key input when the worker runs. '
+                'Live game compatibility is unverified.')
+        if QMessageBox.question(self, 'Apply '+name+'?', text,
+                                QMessageBox.StandardButton.Yes|QMessageBox.StandardButton.No,
+                                QMessageBox.StandardButton.No) != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            self.model.apply_preset(name)
+            self.name_edit.setText(preset_filename(name)[:-5])
+            self.apply_timer.start();self.refresh()
+            self.message.setText('Applied '+name+' (unsaved). Review settings, then save a named config to keep it.')
+        except ValueError as error:
+            self.message.setText(str(error))
 
     def save_named(self):
         name=self.name_edit.text().strip()
