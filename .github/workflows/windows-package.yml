@@ -36,10 +36,17 @@ jobs:
           & .\dist\phantom-native.exe --check-profile --profile native/profiles/reference-26598758.json
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Create ZIP with executable, profile, and instructions
-        run: python tools/package_windows.py --exe dist/phantom-native.exe --output artifacts/phantom-windows-x64.zip --revision ${{ github.sha }}
+        shell: pwsh
+        run: |
+          python tools/package_windows.py --exe dist/phantom-native.exe --output artifacts/phantom-windows-x64.zip --revision ${{ github.sha }}
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Expand-Archive -Path artifacts/phantom-windows-x64.zip -DestinationPath artifacts/windows-package
+          $manifest = Get-Content artifacts/windows-package/BUILD.json | ConvertFrom-Json
+          $actual = (Get-FileHash artifacts/windows-package/phantom-native.exe -Algorithm SHA256).Hash.ToLower()
+          if ($actual -ne $manifest.executable_sha256) { throw 'Packaged EXE checksum mismatch' }
       - uses: actions/upload-artifact@v4
         with:
           name: phantom-windows-x64
-          path: artifacts/phantom-windows-x64.zip
+          path: artifacts/windows-package/
           if-no-files-found: error
           retention-days: 14

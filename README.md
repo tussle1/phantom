@@ -2,7 +2,7 @@
 
 Standalone **64-bit Windows** external runtime using `ReadProcessMemory`, a click-through GDI overlay, and foreground-gated `SendInput`. No browser, web server, injected DLL, kernel driver, or game-memory writes are used by `phantom.py`.
 
-**This is native implementation code, not a verified complete cheat suite. It has not been run against CS2 or Windows in this Linux environment. Passing fixture tests does not establish live compatibility.** Game updates can invalidate the profile, entity layout, and bone indices independently. Reading or automating a game can result in account bans; no anti-cheat compatibility is claimed.
+**This is native implementation code, not a verified complete cheat suite. The Windows build pipeline passes unit tests, Win32 import/ABI checks, and packaged CLI smoke tests. The runtime has not been tested against CS2; passing these checks does not establish live compatibility.** Game updates can invalidate the profile, entity layout, and bone indices independently. Reading or automating a game can result in account bans; no anti-cheat compatibility is claimed.
 
 ## Start
 
@@ -98,7 +98,7 @@ py -3 -m pip install pyinstaller
 build-native.cmd
 ```
 
-This produces `dist\phantom-native.exe`. Run `phantom-native.exe --update-offsets` before normal launch. No executable has been built or tested here; packaging is Windows-side. Config/profile files stay outside the executable.
+This produces `dist\phantom-native.exe`. Run `phantom-native.exe --update-offsets` before normal launch. The GitHub Windows package pipeline also produces an executable with CLI smoke checks. Config/profile files stay outside the executable; live gameplay remains unverified.
 
 ## Tests
 
@@ -107,13 +107,13 @@ python -m unittest discover -s tests -v
 python -m compileall -q native phantom.py
 ```
 
-The native suite exercises a sparse fabricated-memory fixture through entity traversal, stride calibration, schema decoding, skeleton rejection, local spotted-mask selection, target filters, SmoothDamp convergence, input math, prediction, trigger delay/cooldown, grounded transitions, strict configs, and CLI setup. These fixtures are test-only; they are not telemetry used by the runtime. Existing legacy API tests remain intact. Win32 APIs, overlay behavior, synthetic-input acceptance, process offsets, and actual game behavior require Windows/CS2 testing.
+The native suite exercises a sparse fabricated-memory fixture through entity traversal, stride calibration, schema decoding, skeleton rejection, local spotted-mask selection, target filters, SmoothDamp convergence, input math, prediction, trigger delay/cooldown, grounded transitions, strict configs, and CLI setup. These fixtures are test-only; they are not telemetry used by the runtime. Existing legacy API tests remain intact. Win32 imports/INPUT ABI are checked by Windows CI. Overlay rendering, actual memory reads, synthetic-input acceptance, process offsets, and gameplay behavior still require Windows/CS2 testing.
 
 ### Downloadable Windows ZIP
 
 The **Windows package** GitHub Actions workflow builds on a Windows x64 runner,
 checks Win32 imports/ABI, smoke-tests the executable's CLI, and uploads a
-`phantom-windows-x64` artifact containing `phantom-windows-x64.zip`.
+`phantom-windows-x64` artifact, downloadable as a ZIP with the files at its root (no nested ZIP).
 The ZIP contains the EXE, pinned reference profile, a `run.cmd` launcher,
 configuration example, instructions, and a source revision/EXE SHA-256 manifest.
 Extract the complete ZIP and double-click `run.cmd`; Python is not required.
