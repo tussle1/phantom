@@ -17,6 +17,7 @@ constexpr double estimate_margin = 0.1;
 struct Store {
     std::mutex mutex;
     std::array<phantom::CosmeticPreferenceEntry, 32> entries{};
+    std::uint32_t knife_override = 0;
 };
 Store& preferences() {
     // Construct only on an explicit API call, not under the DLL loader lock.
@@ -43,8 +44,17 @@ void snapshot_cosmetic_preferences(std::vector<CosmeticPreferenceEntry>& out) {
     }
 }
 
-int32_t replace_cosmetic_preferences(const std::vector<CosmeticPreferenceEntry>& entries) {
+std::uint32_t snapshot_knife_override() {
+    auto& store = preferences();
+    std::lock_guard<std::mutex> lock(store.mutex);
+    return store.knife_override;
+}
+
+int32_t replace_cosmetic_preferences(const std::vector<CosmeticPreferenceEntry>& entries,
+                                     std::uint32_t knife_override) {
     if (entries.size() > 32) return PHANTOM_CAPACITY_REACHED;
+    if (knife_override != 0 && !is_custom_knife_definition(knife_override))
+        return PHANTOM_INVALID_ARGUMENT;
     for (const auto& entry : entries) {
         if (!valid_preference(&entry.preference) ||
             !valid_custom_name(entry.extras.custom_name) ||
@@ -59,6 +69,7 @@ int32_t replace_cosmetic_preferences(const std::vector<CosmeticPreferenceEntry>&
         for (std::size_t i = 0; i < entries.size(); ++i) {
             store.entries[i] = entries[i];
         }
+        store.knife_override = knife_override;
         return PHANTOM_OK;
     } catch (...) { return PHANTOM_INTERNAL_ERROR; }
 }
@@ -259,11 +270,35 @@ int32_t PHANTOM_CALL phantom_get_cosmetic_mesh_group(uint32_t weapon, uint64_t* 
     } catch (...) { return PHANTOM_INTERNAL_ERROR; }
 }
 
+int32_t PHANTOM_CALL phantom_set_knife_override(uint32_t knife_definition) {
+    if (knife_definition != 0 && !phantom::is_custom_knife_definition(knife_definition))
+        return PHANTOM_INVALID_ARGUMENT;
+    try {
+        auto& store = preferences();
+        std::lock_guard<std::mutex> lock(store.mutex);
+        store.knife_override = knife_definition;
+        if (knife_definition != 0) phantom::set_skin_loadout_enabled(true);
+        return PHANTOM_OK;
+    } catch (...) { return PHANTOM_INTERNAL_ERROR; }
+}
+
+int32_t PHANTOM_CALL phantom_get_knife_override(uint32_t* out_knife_definition) {
+    if (!out_knife_definition) return PHANTOM_INVALID_ARGUMENT;
+    *out_knife_definition = 0;
+    try {
+        auto& store = preferences();
+        std::lock_guard<std::mutex> lock(store.mutex);
+        *out_knife_definition = store.knife_override;
+        return PHANTOM_OK;
+    } catch (...) { return PHANTOM_INTERNAL_ERROR; }
+}
+
 int32_t PHANTOM_CALL phantom_clear_cosmetic_preferences(void) {
     try {
         auto& store = preferences();
         std::lock_guard<std::mutex> lock(store.mutex);
         store.entries = {};
+        store.knife_override = 0;
         return PHANTOM_OK;
     } catch (...) { return PHANTOM_INTERNAL_ERROR; }
 }

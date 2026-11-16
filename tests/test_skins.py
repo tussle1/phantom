@@ -17,6 +17,8 @@ from native.presets import PRESETS, preset_config
 from native.skin_bridge import SkinFoundationBridge, probe_foundation
 from native.skins import (
     DEFAULT_SKIN_ENTRY,
+    KNIFE_DEFINITIONS,
+    KNIVES,
     MAX_SKINS,
     MESH_GROUPS,
     PAINT_KITS,
@@ -25,11 +27,17 @@ from native.skins import (
     WEAPON_BY_ID,
     WEAPON_CATEGORIES,
     WEAPONS,
+    display_weapon_name,
     export_loadout,
+    is_custom_knife,
+    is_knife,
     kit_by_id,
     kits_for_weapon,
+    knife_model_path,
     loadout_document,
     loadout_path,
+    utl_string_token,
+    validate_knife_override,
     validate_skin_entry,
     validate_skins,
     weapon_name,
@@ -46,7 +54,39 @@ class SkinCatalogTests(unittest.TestCase):
             self.assertIn(weapon.category, WEAPON_CATEGORIES)
             self.assertTrue(weapon.name)
             self.assertEqual(weapon_name(weapon.definition), weapon.name)
-        self.assertEqual(weapon_name(507), 'Weapon #507')
+        self.assertEqual(weapon_name(507), 'Karambit')
+        self.assertEqual(display_weapon_name(507), '★ Karambit')
+        self.assertEqual(weapon_name(9999), 'Weapon #9999')
+
+        # All 20 custom CS2 knives present with .vmdl paths, unique MurmurHash2 tokens, and curated finishes.
+        self.assertEqual(len(KNIVES), 20)
+        self.assertEqual(len(KNIFE_DEFINITIONS), 20)
+        tokens = set()
+        for knife in KNIVES:
+            self.assertTrue(knife.is_knife)
+            self.assertTrue(is_custom_knife(knife.definition))
+            self.assertTrue(is_knife(knife.definition))
+            self.assertTrue(knife_model_path(knife.definition).endswith('.vmdl'))
+            tok = utl_string_token(str(knife.definition))
+            self.assertNotEqual(tok, 0)
+            self.assertNotIn(tok, tokens)
+            tokens.add(tok)
+            k_kits = kits_for_weapon(knife.definition)
+            self.assertEqual(k_kits[0].paint_kit, 0)
+            # Every knife gets Vanilla + 35 curated finishes without duplicate display names.
+            names = [k.name for k in k_kits]
+            self.assertEqual(len(names), len(set(names)), f'duplicate finish names on {knife.name}')
+            self.assertGreaterEqual(len(k_kits), 35)
+            self.assertTrue(any(k.paint_kit == 415 and 'Ruby' in k.name for k in k_kits))
+            self.assertTrue(any(k.paint_kit == 568 and 'Emerald' in k.name for k in k_kits))
+            self.assertTrue(any(k.paint_kit == 38 and k.name == 'Fade' for k in k_kits))
+        # Per-knife authentic Gamma/Riptide IDs (e.g., Butterfly Lore 1105 vs Karambit Lore 561).
+        self.assertEqual(kit_by_id(1105, 515).name, 'Lore')
+        self.assertEqual(kit_by_id(561, 507).name, 'Lore')
+        self.assertTrue(is_knife(42) and not is_custom_knife(42))
+        self.assertTrue(is_knife(59) and not is_custom_knife(59))
+        self.assertTrue(knife_model_path(42).endswith('.vmdl'))
+        self.assertFalse(is_knife(7))
 
         for kit in PAINT_KITS:
             self.assertIn(kit.rarity, RARITY_COLORS)
@@ -136,19 +176,30 @@ class SkinValidationAndConfigTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             validate_skins(too_many)
 
+        # Knife override validation accepts 0 and all 20 custom knives, rejects firearms & defaults.
+        self.assertEqual(validate_knife_override(0), 0)
+        for knife in KNIVES:
+            self.assertEqual(validate_knife_override(knife.definition), knife.definition)
+        for bad_knife in (-1, 7, 42, 59, 501, 524, 999, True, '507', None):
+            with self.subTest(bad_knife=bad_knife), self.assertRaises(ValueError):
+                validate_knife_override(bad_knife)
+
     def test_legacy_config_migration_and_preset_preservation(self):
         legacy = asdict(Config())
         legacy.pop('skin_changer')
+        legacy.pop('knife_override')
         legacy.pop('skins')
         upgraded = validate_config({'version': 1, 'settings': legacy})
         self.assertFalse(upgraded.skin_changer)
+        self.assertEqual(upgraded.knife_override, 0)
         self.assertEqual(upgraded.skins, {})
         self.assertNotIn('skins', legacy)
 
-        personal = Config(skin_changer=True, skins={'7': {**DEFAULT_SKIN_ENTRY, 'paint_kit': 707}})
+        personal = Config(skin_changer=True, knife_override=507, skins={'507': {**DEFAULT_SKIN_ENTRY, 'paint_kit': 415}})
         for name in PRESETS:
             applied = preset_config(name, personal)
             self.assertFalse(applied.skin_changer)
+            self.assertEqual(applied.knife_override, 507)
             self.assertEqual(applied.skins, personal.skins)
 
 
@@ -226,26 +277,32 @@ class SkinCppBridgeIntegrationTests(unittest.TestCase):
             self.assertFalse(status['runtime_available'])
             self.assertFalse(status['game_adapter_ready'])
 
-            skins = STARTER_LOADOUTS['phantom neon']
-            exported = export_loadout(directory, True, skins)
+            skins = STARTER_LOADOUTS['knife gems']
+            exported = export_loadout(directory, True, skins, knife_override=507)
             loaded = bridge.load_skin_file(exported)
             self.assertEqual(len(loaded), len(skins))
+            self.assertEqual(bridge.get_knife_override(), 507)
             by_weapon = {item['weapon_definition']: item for item in loaded}
-            self.assertEqual(by_weapon[7]['paint_kit'], 707)
-            self.assertEqual(by_weapon[7]['stattrak'], 1337)
-            self.assertEqual(by_weapon[7]['custom_name'], 'phantom')
-            self.assertEqual(by_weapon[7]['mesh_group'], 2)
+            self.assertEqual(by_weapon[507]['paint_kit'], 415)
+            self.assertEqual(by_weapon[507]['stattrak'], 777)
+            self.assertEqual(by_weapon[507]['custom_name'], 'ruby')
+            self.assertEqual(by_weapon[507]['mesh_group'], 1)
+            self.assertEqual(by_weapon[515]['paint_kit'], 568)
 
-            # Direct sync_skins roundtrip matches as well.
-            synced = bridge.sync_skins({'9': {**DEFAULT_SKIN_ENTRY, 'paint_kit': 344, 'seed': 55,
-                                              'wear': 0.01, 'stattrak': -1, 'custom_name': 'dlore', 'mesh_group': 'legacy'}})
+            # Direct sync_skins + knife_override roundtrip matches as well.
+            synced = bridge.sync_skins(
+                {'515': {**DEFAULT_SKIN_ENTRY, 'paint_kit': 1105, 'seed': 55,
+                         'wear': 0.01, 'stattrak': -1, 'custom_name': 'bfk lore', 'mesh_group': 'modern'}},
+                knife_override=515,
+            )
             self.assertEqual(synced, 1)
+            self.assertEqual(bridge.get_knife_override(), 515)
             listed = bridge.list_preferences()
             self.assertEqual(len(listed), 1)
-            self.assertEqual(listed[0]['weapon_definition'], 9)
-            self.assertEqual(listed[0]['paint_kit'], 344)
-            self.assertEqual(listed[0]['custom_name'], 'dlore')
-            self.assertEqual(listed[0]['mesh_group'], 2)
+            self.assertEqual(listed[0]['weapon_definition'], 515)
+            self.assertEqual(listed[0]['paint_kit'], 1105)
+            self.assertEqual(listed[0]['custom_name'], 'bfk lore')
+            self.assertEqual(listed[0]['mesh_group'], 1)
 
             # Verify probe_foundation discovers the built library in extra_dirs.
             probed = probe_foundation((directory,))

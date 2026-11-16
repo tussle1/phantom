@@ -182,19 +182,40 @@ void cosmetic_tests() {
           std::strcmp(name_buf, "ak-test") == 0, "loaded file populates custom name");
     check(phantom_get_cosmetic_mesh_group(7, &mask) == PHANTOM_OK && mask == 2,
           "loaded file populates mesh group");
+
+    // Knife override C ABI and JSON file round-trip.
+    uint32_t active_knife = 999;
+    check(phantom_get_knife_override(&active_knife) == PHANTOM_OK && active_knife == 0,
+          "knife override defaults to 0 when omitted in loadout json");
+    check(phantom_set_knife_override(7) == PHANTOM_INVALID_ARGUMENT,
+          "non-knife weapon rejected in phantom_set_knife_override");
+    check(phantom_set_knife_override(42) == PHANTOM_INVALID_ARGUMENT,
+          "default CT knife rejected in phantom_set_knife_override");
+    check(phantom_set_knife_override(507) == PHANTOM_OK &&
+          phantom_get_knife_override(&active_knife) == PHANTOM_OK && active_knife == 507,
+          "Karambit knife override round-trips through C ABI");
+    {
+        std::ofstream file(tmp_path, std::ios::binary);
+        file << R"({"version":1,"enabled":true,"knife_override":515,"entries":[{"weapon_definition":515,"paint_kit":415,"seed":387,"wear":0.01,"stattrak":77,"custom_name":"bfk-ruby","mesh_group":1},{"weapon_definition":7,"paint_kit":282,"seed":420,"wear":0.15,"stattrak":1337,"custom_name":"ak-test","mesh_group":2}]})";
+    }
+    check(phantom_runtime_load_skin_file(tmp_path.u8string().c_str()) == PHANTOM_OK &&
+          phantom_get_knife_override(&active_knife) == PHANTOM_OK && active_knife == 515 &&
+          phantom_get_cosmetic_preference(515, &out) == PHANTOM_OK && out.paint_kit == 415,
+          "loaded file populates knife_override and knife skin preference");
     {
         std::ofstream file(tmp_path, std::ios::binary);
         file << R"({"version":1,"enabled":true,"entries":[{"weapon_definition":7,"paint_kit":282,"seed":9999,"wear":0.15,"stattrak":-1}]})";
     }
     check(phantom_runtime_load_skin_file(tmp_path.u8string().c_str()) == PHANTOM_INVALID_ARGUMENT,
           "invalid loadout file rejected");
-    check(phantom_get_cosmetic_preference(7, &out) == PHANTOM_OK && out.paint_kit == 282,
-          "invalid loadout file preserves prior preferences");
+    check(phantom_get_cosmetic_preference(7, &out) == PHANTOM_OK && out.paint_kit == 282 &&
+          phantom_get_knife_override(&active_knife) == PHANTOM_OK && active_knife == 515,
+          "invalid loadout file preserves prior preferences and knife override");
     std::error_code ec;
     std::filesystem::remove(tmp_path, ec);
 
-    // Fill every remaining slot after weapon 7, then verify overflow is explicit.
-    for (uint32_t weapon = 100; weapon < 131; ++weapon) {
+    // Fill every remaining slot after weapon 7 and knife 515, then verify overflow is explicit.
+    for (uint32_t weapon = 100; weapon < 130; ++weapon) {
         p = valid_preference(weapon, weapon);
         check(phantom_set_cosmetic_preference(&p) == PHANTOM_OK, "preference store accepts unique weapon id");
     }
@@ -202,8 +223,9 @@ void cosmetic_tests() {
     check(phantom_set_cosmetic_preference(&p) == PHANTOM_CAPACITY_REACHED,
           "preference store reports capacity instead of evicting silently");
     check(phantom_clear_cosmetic_preferences() == PHANTOM_OK &&
-          phantom_get_cosmetic_preference(7, &out) == PHANTOM_NOT_FOUND,
-          "clear removes all preferences");
+          phantom_get_cosmetic_preference(7, &out) == PHANTOM_NOT_FOUND &&
+          phantom_get_knife_override(&active_knife) == PHANTOM_OK && active_knife == 0,
+          "clear removes all preferences and resets knife override");
 }
 
 int main() {

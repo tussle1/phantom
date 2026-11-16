@@ -11,7 +11,7 @@ import tempfile
 
 from .hotkeys import keys_conflict
 from .esp_style import DEFAULT_STYLE
-from .skins import validate_skins
+from .skins import validate_knife_override, validate_skins
 
 
 @dataclass
@@ -35,6 +35,7 @@ class Config:
     trigger_delay_ms: float = 150.0
     bunny_hop: bool = False
     skin_changer: bool = False
+    knife_override: int = 0
     skins: dict = field(default_factory=dict)
     max_distance_m: float = 150.0
     mouse_yaw: float = 0.022
@@ -63,7 +64,7 @@ def validate_config(document):
     # Upgrade older v1 settings only for explicitly introduced optional fields.
     if isinstance(settings, dict) and not (set(settings) - set(defaults)):
         missing = set(defaults) - set(settings)
-        if missing <= {'esp_style', 'aim_draw_fov', 'catalyst_smoothing', 'skin_changer', 'skins'}:
+        if missing <= {'esp_style', 'aim_draw_fov', 'catalyst_smoothing', 'skin_changer', 'knife_override', 'skins'}:
             settings = {**settings, **{key: defaults[key] for key in missing}}
     if not isinstance(settings, dict) or set(settings) != set(defaults):
         raise ValueError('Unknown or missing native setting; dashboard configs are not native configs.')
@@ -124,9 +125,10 @@ def validate_config(document):
     holds = [v for k, v in settings['keys'].items() if k.endswith('_hold')]
     if any(keys_conflict(a, b) for i, a in enumerate(toggles) for b in toggles[i+1:]+holds):
         raise ValueError('Toggle/action key bindings must be unique and separate from hold keys.')
+    knife_override = validate_knife_override(settings['knife_override'])
     skins = validate_skins(settings['skins'])
     return Config(**{**settings, 'keys': dict(settings['keys']), 'bones': dict(settings['bones']),
-                     'esp_style': dict(settings['esp_style']), 'skins': skins})
+                     'esp_style': dict(settings['esp_style']), 'knife_override': knife_override, 'skins': skins})
 
 
 def config_path(directory, name):

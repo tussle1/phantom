@@ -354,6 +354,53 @@ class GuiTests(unittest.TestCase):
         self.assertIsNone(self.panel.skin_panel)
         self.panel.refresh()
 
+    def test_local_knife_changer_tab_workflow(self):
+        import json
+        from native.skins import loadout_path
+        self.panel.select_page('Skins')
+        self.app.processEvents()
+        sp = self.panel.skin_panel
+        self.assertIsNotNone(sp)
+        # Filter to Knives category: all 20 custom CS2 knives should appear.
+        sp.category_combo.setCurrentText('Knives')
+        self.assertEqual(sp.weapon_combo.count(), 20)
+        # Pick Karambit (507) and apply Doppler Ruby (415).
+        k_idx = sp.weapon_combo.findData(507)
+        self.assertGreaterEqual(k_idx, 0)
+        sp.weapon_combo.setCurrentIndex(k_idx)
+        sp.kit_spin.setValue(415)
+        sp.seed_spin.setValue(387)
+        QTest.mouseClick(sp.apply_weapon_button, Qt.MouseButton.LeftButton)
+        self.assertIn('507', self.panel.model.config.skins)
+        self.assertEqual(self.panel.model.config.skins['507']['paint_kit'], 415)
+        # Applying a knife skin when no knife override is active auto-equips it.
+        self.assertEqual(self.panel.model.config.knife_override, 507)
+        self.assertEqual(sp.knife_override_combo.currentData(), 507)
+        # Switch active knife override to Butterfly Knife (515) via the combo.
+        bfk_idx = sp.knife_override_combo.findData(515)
+        self.assertGreaterEqual(bfk_idx, 0)
+        sp.knife_override_combo.setCurrentIndex(bfk_idx)
+        self.assertEqual(self.panel.model.config.knife_override, 515)
+        # Export .skin-loadout.json and verify knife_override is serialized.
+        QTest.mouseClick(sp.export_button, Qt.MouseButton.LeftButton)
+        doc = json.loads(loadout_path(self.temp.name).read_text(encoding='utf-8'))
+        self.assertEqual(doc['knife_override'], 515)
+        self.assertEqual(doc['entries'][0]['weapon_definition'], 507)
+        # Load knife gems starter pack: preserves Butterfly (515) since it is in the pack.
+        sp.pack_combo.setCurrentText('knife gems')
+        QTest.mouseClick(sp.load_pack_button, Qt.MouseButton.LeftButton)
+        self.assertEqual(self.panel.model.config.knife_override, 515)
+        self.assertIn('526', self.panel.model.config.skins)
+        # Clearing all resets knife_override to 0; loading knife gems again auto-equips Karambit (507).
+        QTest.mouseClick(sp.clear_all_button, Qt.MouseButton.LeftButton)
+        self.assertEqual(self.panel.model.config.knife_override, 0)
+        self.assertEqual(self.panel.model.config.skins, {})
+        QTest.mouseClick(sp.load_pack_button, Qt.MouseButton.LeftButton)
+        self.assertEqual(self.panel.model.config.knife_override, 507)
+        QTest.mouseClick(sp.clear_all_button, Qt.MouseButton.LeftButton)
+        self.assertEqual(self.panel.model.config.knife_override, 0)
+        self.assertEqual(self.panel.model.config.skins, {})
+
     def test_visual_controls(self):
         self.panel.select_page('Visuals')
         QTest.mouseClick(self.panel.toggles['skeleton'], Qt.MouseButton.LeftButton)

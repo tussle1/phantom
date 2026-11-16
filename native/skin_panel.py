@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
 from .skin_bridge import probe_foundation
 from .skins import (
     DEFAULT_SKIN_ENTRY,
+    KNIVES,
     MAX_CUSTOM_NAME,
     MAX_PAINT_KIT,
     MAX_SEED,
@@ -36,6 +37,8 @@ from .skins import (
     WEAPON_CATEGORIES,
     WEAPONS,
     WEAR_TIERS,
+    display_weapon_name,
+    is_custom_knife,
     kit_by_id,
     kits_for_weapon,
     weapon_name,
@@ -56,13 +59,15 @@ class SkinPreviewCard(QWidget):
         self.weapon_definition = 7
         self.entry = dict(DEFAULT_SKIN_ENTRY)
         self.configured = False
+        self.active_knife_override = 0
         self.setFixedHeight(114)
         self.setAccessibleName('Local skin preview')
 
-    def set_state(self, weapon_definition, entry, configured):
+    def set_state(self, weapon_definition, entry, configured, active_knife_override=0):
         self.weapon_definition = int(weapon_definition)
         self.entry = dict(entry)
         self.configured = bool(configured)
+        self.active_knife_override = int(active_knife_override)
         self.update()
 
     def paintEvent(self, event):
@@ -94,7 +99,7 @@ class SkinPreviewCard(QWidget):
         p.drawRoundedRect(QRectF(1.5, 1.5, self.width() - 3.0, 4.0), 2, 2)
 
         # Weapon heading & rarity pill.
-        w_label = f'{weapon_name(self.weapon_definition)} · #{self.weapon_definition}'
+        w_label = f'{display_weapon_name(self.weapon_definition)} · #{self.weapon_definition}'
         p.setPen(ink)
         p.setFont(ui_font(11))
         p.drawText(QRectF(10, 10, self.width() - 110, 20), Qt.AlignmentFlag.AlignVCenter, w_label)
@@ -147,18 +152,23 @@ class SkinPreviewCard(QWidget):
         p.drawText(QRectF(10, 71, self.width() - 20, 16), Qt.AlignmentFlag.AlignVCenter,
                    f'{wear_val:.4f} · {tier_label} ({tier_short})')
 
-        # Bottom badges: seed, StatTrak, nametag, mesh.
+        # Bottom badges: seed, StatTrak, knife override, nametag, mesh.
         badges = [f'seed {self.entry["seed"]}', f'mesh {self.entry["mesh_group"]}']
         if self.entry['stattrak'] >= 0:
             badges.insert(1, f'st {self.entry["stattrak"]}')
+        if is_custom_knife(self.weapon_definition) and self.active_knife_override == self.weapon_definition:
+            badges.insert(0, 'equipped')
         if self.entry['custom_name']:
             badges.append(f'"{self.entry["custom_name"]}"')
         p.setPen(ink)
         p.setFont(ui_font(8))
-        p.drawText(QRectF(10, 90, self.width() - 92, 18), Qt.AlignmentFlag.AlignVCenter, ' · '.join(badges))
+        badge_text = p.fontMetrics().elidedText(
+            ' · '.join(badges), Qt.TextElideMode.ElideRight, max(40, int(self.width() - 86))
+        )
+        p.drawText(QRectF(10, 90, self.width() - 84, 18), Qt.AlignmentFlag.AlignVCenter, badge_text)
 
         p.setPen(muted)
-        p.drawText(QRectF(self.width() - 88, 90, 78, 18),
+        p.drawText(QRectF(self.width() - 74, 90, 64, 18),
                    Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, 'local only')
 
 
@@ -193,8 +203,23 @@ class SkinPanel(QWidget):
         layout.addLayout(top_row)
 
         self.count_label = QLabel()
+        self.count_label.setWordWrap(True)
         self._muted_labels.append(self.count_label)
         layout.addWidget(self.count_label)
+
+        knife_row = QHBoxLayout()
+        knife_row.addWidget(QLabel('Active knife'))
+        knife_row.addStretch()
+        self.knife_override_combo = QComboBox()
+        self.knife_override_combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+        self.knife_override_combo.setFixedWidth(168)
+        self.knife_override_combo.setAccessibleName('Active knife model override')
+        self.knife_override_combo.addItem('Default knife (off)', 0)
+        for knife in KNIVES:
+            self.knife_override_combo.addItem(f'★ {knife.name}', knife.definition)
+        self.knife_override_combo.currentIndexChanged.connect(self._on_knife_override_changed)
+        knife_row.addWidget(self.knife_override_combo)
+        layout.addLayout(knife_row)
 
         self.preview = SkinPreviewCard(self)
         layout.addWidget(self.preview)
@@ -204,7 +229,8 @@ class SkinPanel(QWidget):
         cat_row.addWidget(QLabel('Category'))
         cat_row.addStretch()
         self.category_combo = QComboBox()
-        self.category_combo.setFixedWidth(180)
+        self.category_combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+        self.category_combo.setFixedWidth(168)
         self.category_combo.setAccessibleName('Weapon category')
         self.category_combo.addItems(list(WEAPON_CATEGORIES))
         self.category_combo.currentTextChanged.connect(self._on_category_changed)
@@ -215,7 +241,8 @@ class SkinPanel(QWidget):
         weapon_row.addWidget(QLabel('Weapon'))
         weapon_row.addStretch()
         self.weapon_combo = QComboBox()
-        self.weapon_combo.setFixedWidth(180)
+        self.weapon_combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+        self.weapon_combo.setFixedWidth(168)
         self.weapon_combo.setAccessibleName('Weapon selector')
         self.weapon_combo.currentIndexChanged.connect(self._on_weapon_changed)
         weapon_row.addWidget(self.weapon_combo)
@@ -225,7 +252,8 @@ class SkinPanel(QWidget):
         kit_row.addWidget(QLabel('Skin preset'))
         kit_row.addStretch()
         self.kit_combo = QComboBox()
-        self.kit_combo.setFixedWidth(180)
+        self.kit_combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+        self.kit_combo.setFixedWidth(168)
         self.kit_combo.setAccessibleName('Skin finish preset')
         self.kit_combo.currentIndexChanged.connect(self._on_kit_preset_changed)
         kit_row.addWidget(self.kit_combo)
@@ -236,7 +264,7 @@ class SkinPanel(QWidget):
         kit_id_row.addStretch()
         self.kit_spin = QSpinBox()
         self.kit_spin.setRange(0, MAX_PAINT_KIT)
-        self.kit_spin.setFixedWidth(180)
+        self.kit_spin.setFixedWidth(168)
         self.kit_spin.setKeyboardTracking(False)
         self.kit_spin.setAccessibleName('Paint kit ID')
         self.kit_spin.valueChanged.connect(self._on_kit_spin_changed)
@@ -319,7 +347,7 @@ class SkinPanel(QWidget):
         name_row.addStretch()
         self.name_edit = QLineEdit()
         self.name_edit.setMaxLength(MAX_CUSTOM_NAME)
-        self.name_edit.setFixedWidth(180)
+        self.name_edit.setFixedWidth(168)
         self.name_edit.setPlaceholderText('Optional local tag')
         self.name_edit.setAccessibleName('Weapon custom nametag')
         self.name_edit.textChanged.connect(self._update_preview)
@@ -330,8 +358,9 @@ class SkinPanel(QWidget):
         mesh_row.addWidget(QLabel('Model mesh'))
         mesh_row.addStretch()
         self.mesh_combo = QComboBox()
+        self.mesh_combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
         self.mesh_combo.addItems(list(MESH_GROUPS))
-        self.mesh_combo.setFixedWidth(180)
+        self.mesh_combo.setFixedWidth(168)
         self.mesh_combo.setAccessibleName('Weapon model mesh group')
         self.mesh_combo.currentTextChanged.connect(self._update_preview)
         mesh_row.addWidget(self.mesh_combo)
@@ -343,7 +372,7 @@ class SkinPanel(QWidget):
         self.apply_weapon_button.setFixedHeight(30)
         self.apply_weapon_button.clicked.connect(self.apply_current_weapon)
         action_row.addWidget(self.apply_weapon_button, 1)
-        self.remove_weapon_button = QPushButton('Remove weapon')
+        self.remove_weapon_button = QPushButton('Remove')
         self.remove_weapon_button.setAccessibleName('Remove skin from selected weapon')
         self.remove_weapon_button.setFixedHeight(30)
         self.remove_weapon_button.clicked.connect(self.remove_current_weapon)
@@ -354,22 +383,26 @@ class SkinPanel(QWidget):
         self._section(layout, 'ACTIVE LOADOUT')
         self.loadout_list = QListWidget()
         self.loadout_list.setFixedHeight(96)
+        self.loadout_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.loadout_list.setTextElideMode(Qt.TextElideMode.ElideRight)
         self.loadout_list.setAccessibleName('Configured weapon skins')
         self.loadout_list.itemClicked.connect(self._on_loadout_item_clicked)
         layout.addWidget(self.loadout_list)
 
         pack_row = QHBoxLayout()
         self.pack_combo = QComboBox()
+        self.pack_combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+        self.pack_combo.setMinimumWidth(110)
         self.pack_combo.addItems(list(STARTER_LOADOUTS))
         self.pack_combo.setAccessibleName('Starter skin pack')
         pack_row.addWidget(self.pack_combo, 1)
-        self.load_pack_button = QPushButton('Load pack')
+        self.load_pack_button = QPushButton('Load')
         self.load_pack_button.setAccessibleName('Load starter skin pack')
         self.load_pack_button.setFixedHeight(28)
         self.load_pack_button.clicked.connect(self.load_selected_pack)
         pack_row.addWidget(self.load_pack_button)
         self._secondary_buttons.append(self.load_pack_button)
-        self.clear_all_button = QPushButton('Clear all')
+        self.clear_all_button = QPushButton('Clear')
         self.clear_all_button.setAccessibleName('Clear all configured skins')
         self.clear_all_button.setFixedHeight(28)
         self.clear_all_button.clicked.connect(self.clear_all_skins)
@@ -388,16 +421,19 @@ class SkinPanel(QWidget):
         probe = probe_foundation()
         self.bridge_status = QLabel(probe['summary'])
         self.bridge_status.setWordWrap(True)
+        self.bridge_status.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
         self._muted_labels.append(self.bridge_status)
         layout.addWidget(self.bridge_status)
 
         note = QLabel(
-            'Local client-side cosmetic preferences only. Never alters Steam inventory or other players’ views. '
-            'Phantom.py remains read-only; save in Configs to persist and sync .skin-loadout.json for the experimental C++ foundation DLL.'
+            'Local client-side cosmetics only (20 knives + 34 firearms); never alters Steam inventory or other players’ views. '
+            'Knife overrides write definition/subclass/finish fields; live CS2 3D .vmdl swaps also require an in-process Source 2 UpdateSubclass/SetModel hook (unvalidated live).'
         )
         note.setWordWrap(True)
+        note.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
         self._muted_labels.append(note)
         layout.addWidget(note)
+        layout.addSpacing(4)
 
         self.apply_theme()
         self._populate_weapons()
@@ -450,7 +486,7 @@ class SkinPanel(QWidget):
             if category != 'All' and weapon.category != category:
                 continue
             tag = ' · set' if str(weapon.definition) in configured else ''
-            self.weapon_combo.addItem(f'{weapon.name} (#{weapon.definition}){tag}', weapon.definition)
+            self.weapon_combo.addItem(f'{display_weapon_name(weapon.definition)} (#{weapon.definition}){tag}', weapon.definition)
             if weapon.definition == self.selected_weapon:
                 chosen_index = self.weapon_combo.count() - 1
         if category == 'All':
@@ -515,8 +551,30 @@ class SkinPanel(QWidget):
         if self._syncing:
             return
         configured = str(self.selected_weapon) in self.panel.model.config.skins
-        self.preview.set_state(self.selected_weapon, self.draft_entry(), configured)
+        self.preview.set_state(
+            self.selected_weapon,
+            self.draft_entry(),
+            configured,
+            active_knife_override=self.panel.model.config.knife_override,
+        )
         self.remove_weapon_button.setEnabled(configured)
+
+    def _on_knife_override_changed(self, index):
+        if self._syncing or index < 0:
+            return
+        knife_id = int(self.knife_override_combo.itemData(index) or 0)
+        try:
+            self.panel.model.set_knife_override(knife_id)
+            self.panel.apply_timer.start()
+            if knife_id:
+                self.panel.message.setText(
+                    f'Active knife override set to {display_weapon_name(knife_id)}. Save in Configs or sync .skin-loadout.json.'
+                )
+            else:
+                self.panel.message.setText('Active knife override cleared (using default knife).')
+            self.refresh_from_model()
+        except ValueError as error:
+            self.panel.message.setText(str(error))
 
     def _on_category_changed(self, _text):
         self._populate_weapons()
@@ -596,10 +654,12 @@ class SkinPanel(QWidget):
     def apply_current_weapon(self):
         try:
             self.panel.model.set_skin(self.selected_weapon, self.draft_entry())
+            if is_custom_knife(self.selected_weapon) and self.panel.model.config.knife_override == 0:
+                self.panel.model.set_knife_override(self.selected_weapon)
             self.panel.apply_timer.start()
             self.refresh_from_model()
             self.panel.message.setText(
-                f'Updated {weapon_name(self.selected_weapon)} locally. Save in Configs or sync .skin-loadout.json.'
+                f'Updated {display_weapon_name(self.selected_weapon)} locally. Save in Configs or sync .skin-loadout.json.'
             )
         except ValueError as error:
             self.panel.message.setText(str(error))
@@ -609,7 +669,7 @@ class SkinPanel(QWidget):
             self.panel.apply_timer.start()
             self._load_weapon_into_editor(self.selected_weapon)
             self.refresh_from_model()
-            self.panel.message.setText(f'Removed {weapon_name(self.selected_weapon)} from local skin loadout.')
+            self.panel.message.setText(f'Removed {display_weapon_name(self.selected_weapon)} from local skin loadout.')
 
     def load_selected_pack(self):
         pack = self.pack_combo.currentText()
@@ -632,17 +692,27 @@ class SkinPanel(QWidget):
     def sync_loadout_file(self):
         try:
             exported = self.panel.model.export_skins()
-            self.panel.message.setText(f'Synced local skin loadout to {exported.name} ({len(self.panel.model.config.skins)} weapons).')
+            knife_id = self.panel.model.config.knife_override
+            knife_part = f', knife {display_weapon_name(knife_id)}' if knife_id else ''
+            self.panel.message.setText(
+                f'Synced local skin loadout to {exported.name} ({len(self.panel.model.config.skins)} weapons{knife_part}).'
+            )
         except (OSError, ValueError) as error:
             self.panel.message.setText(str(error))
 
     def refresh_from_model(self):
         skins = self.panel.model.config.skins
+        knife_override = self.panel.model.config.knife_override
         stored = skins.get(str(self.selected_weapon))
         if stored != self._loaded_entry:
             self._load_weapon_into_editor(self.selected_weapon)
+        self._syncing = True
+        k_idx = self.knife_override_combo.findData(knife_override)
+        self.knife_override_combo.setCurrentIndex(k_idx if k_idx >= 0 else 0)
+        self._syncing = False
         state = 'enabled' if self.panel.model.config.skin_changer else 'disabled'
-        self.count_label.setText(f'{len(skins)} / {MAX_SKINS} weapons configured · local skin changer {state}')
+        knife_text = f' · knife {display_weapon_name(knife_override)}' if knife_override else ''
+        self.count_label.setText(f'{len(skins)} / {MAX_SKINS} weapons configured{knife_text} · local skin changer {state}')
         self._populate_weapons()
         self.loadout_list.clear()
         for key in sorted(skins, key=int):
@@ -652,8 +722,11 @@ class SkinPanel(QWidget):
             kit_name = kit.name if kit else f'kit {entry["paint_kit"]}'
             _, short, _ = wear_tier(entry['wear'])
             st_part = f' · st {entry["stattrak"]}' if entry['stattrak'] >= 0 else ''
-            item = QListWidgetItem(f'{weapon_name(weapon_id)} · {kit_name} ({short} {entry["wear"]:.3f}{st_part})')
+            eq_part = ' · equipped' if weapon_id == knife_override else ''
+            item = QListWidgetItem(
+                f'{display_weapon_name(weapon_id)} · {kit_name} ({short} {entry["wear"]:.3f}{st_part}{eq_part})'
+            )
             item.setData(Qt.ItemDataRole.UserRole, weapon_id)
             self.loadout_list.addItem(item)
-        self.clear_all_button.setEnabled(bool(skins))
+        self.clear_all_button.setEnabled(bool(skins) or knife_override != 0)
         self._update_preview()
