@@ -46,6 +46,24 @@ py -3 phantom.py --check-profile
 
 ## Native control panel
 
+### GUI animation clip
+
+[Watch the 15-second GUI demo (MP4)](docs/demos/gui-demo.mp4).
+This records actual offscreen Qt frames on Windows at 30 fps, not a mock-up or
+in-game footage. Captions and click rings are annotations; the panel rendering
+and animations come from the real widgets. No game worker is started.
+
+To record again with optional developer dependencies:
+
+```sh
+python -m pip install -r requirements-gui.txt imageio-ffmpeg==0.6.0
+python tools/record_gui.py --output artifacts/gui-demo.mp4
+```
+
+The recorder uses temporary config storage and does not save changes to your
+normal settings. FFmpeg is supplied by the optional imageio-ffmpeg wheel; it is
+not included in the application EXE or required for normal use.
+
 ### Screenshots (Poppins)
 
 Actual Qt control-panel captures from the Windows runner, without game access:
