@@ -27,6 +27,8 @@ jobs:
           QT_QPA_PLATFORM: offscreen
         shell: python
         run: |
+          import os, sys
+          sys.path.insert(0, os.getcwd())
           from PySide6.QtWidgets import QApplication
           from PySide6.QtTest import QTest
           from native.gui import ControlPanel
