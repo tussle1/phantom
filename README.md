@@ -116,6 +116,8 @@ the current visual state, and closing the panel stops active animations.
 
 ### GUI customization
 
+[View the appearance page](docs/screenshots/gui-appearance.png).
+
 Click **appearance** in the title bar (available in compact and expanded modes).
 Choose phantom, midnight, forest, or graphite; customize the accent and background
 using the native color picker; and select compact or comfortable spacing. Colors

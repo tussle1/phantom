@@ -223,8 +223,8 @@ class Hero(QWidget):
         p.drawRoundedRect(QRectF(self.width()-81,8,71,22),11,11)
         p.setPen(QColor('#fff4fc'));p.setFont(ui_font(8))
         p.drawText(QRectF(self.width()-81,8,71,22),Qt.AlignmentFlag.AlignCenter,self.status)
-        p.setFont(ui_font(18));p.drawText(9,70,'CS2 · native workspace')
-        p.setFont(ui_font(9));p.drawText(10,92,self.profile)
+        p.setFont(ui_font(18));p.drawText(9,self.height()-34,'CS2 · native workspace')
+        p.setFont(ui_font(9));p.drawText(10,self.height()-12,self.profile)
 
 
 class SliderRow(QWidget):
@@ -589,7 +589,7 @@ class ControlPanel(QWidget):
         self.setFixedWidth(width if self.expanded else min(440,width))
         self.overview.setFixedWidth(min(440, max(360,width//2)) if self.expanded else 440)
         self.workspace.setMinimumWidth(self.overview.width()+340 if self.expanded else 440)
-        self.workspace.setMinimumHeight(410 if self.appearance.spacing=='compact' else 450)
+        self.workspace.setMinimumHeight(400 if self.appearance.spacing=='compact' else 440)
         wanted = 600 if self.expanded else 558
         self.setFixedHeight(min(wanted, available.height()-24) if available else wanted)
 
