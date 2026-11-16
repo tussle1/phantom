@@ -306,6 +306,18 @@ build-native.cmd
 
 This produces the windowed GUI executable `dist\phantom-native.exe`. Run `phantom-native.exe --update-offsets` before normal launch. The GitHub Windows package pipeline also produces an executable with CLI smoke checks. Config/profile files stay outside the executable; live gameplay remains unverified.
 
+## C++ internal foundation
+
+An x64 C++ DLL is included as a tested foundation for the requested internal rewrite. Build it with:
+
+```powershell
+cmake -S cpp -B build-cpp -A x64
+cmake --build build-cpp --config Release
+ctest --test-dir build-cpp -C Release --output-on-failure
+```
+
+The DLL exports a C ABI for bomb-timer evaluation, an experimental Windows-only in-process bomb reader, an opt-in transparent Poppins timer overlay, and inert cosmetic preferences (weapon, paint kit, seed, wear, StatTrak). Loading it alone does not read or draw anything; a host must call the runtime API explicitly. The reader uses a pinned build profile and fails closed on unreadable data, but it has only fabricated-memory coverage and has not been validated in live CS2. Cosmetic preferences are stored locally but not applied, written, refreshed, or rendered; `phantom_apply_cosmetics()` still returns `PHANTOM_NOT_INTEGRATED`. There is no injector, anti-cheat bypass, or inventory ownership change. See [cpp/README.md](cpp/README.md) and never treat CI checks as CS2 compatibility proof.
+
 ## Tests
 
 ```sh
@@ -322,6 +334,7 @@ checks Win32 imports/ABI, tests actual Qt controls, smoke-tests the executable a
 captures its compact/expanded control panel, then uploads a
 `phantom-windows-x64` artifact, downloadable as a ZIP with the files at its root (no nested ZIP).
 The ZIP contains the EXE, pinned reference profile, a `run.cmd` launcher,
-configuration example, instructions, actual control-panel screenshots, and a source revision/EXE SHA-256 manifest.
+configuration example, instructions, actual control-panel screenshots, `phantom-cpp/` (the tested C++ foundation DLL, header and status document), and a source revision/EXE/DLL SHA-256 manifest.
 Extract the complete ZIP and double-click `run.cmd`; Python is not required.
+The DLL includes an experimental bomb-timer runtime adapter, but it is not live-game validated and does not include a working skin override.
 A successful package build is not a live-game compatibility test.

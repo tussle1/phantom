@@ -33,3 +33,8 @@ jobs:
       - name: Check Windows imports and INPUT ABI (no game access)
         if: runner.os == 'Windows'
         run: python -c "import ctypes; from native import windows; assert ctypes.sizeof(windows.INPUT) == 40"
+      - name: Build and test C++ foundation
+        run: |
+          cmake -S cpp -B build-cpp -DCMAKE_BUILD_TYPE=Release
+          cmake --build build-cpp --config Release
+          ctest --test-dir build-cpp -C Release --output-on-failure
