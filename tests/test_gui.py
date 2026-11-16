@@ -146,7 +146,8 @@ class GuiTests(unittest.TestCase):
         self.assertEqual(self.panel.model.config.aim,original_aim)
         QTest.keyClick(editor.preview,Qt.Key.Key_1)
         self.assertEqual(self.panel.model.config.priority_bone,'head')
-        QTest.mouseClick(editor.style_checks['box'],Qt.MouseButton.LeftButton)
+        checkbox = editor.style_checks['box']
+        QTest.mouseClick(checkbox,Qt.MouseButton.LeftButton,pos=QPoint(8,checkbox.height()//2))
         editor.width_combo.setCurrentText('3')
         editor.change_style('visible_color','#21aabb')
         self.assertTrue(self.panel.model.config.esp_style['box'])
