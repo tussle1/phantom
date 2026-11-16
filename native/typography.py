@@ -30,4 +30,8 @@ def configure_fonts():
 
 
 def ui_font(points):
-    return QFont(configure_fonts(), points)
+    font = QFont(configure_fonts(), points)
+    # Presentation only: config values, paths, key names and enum identifiers
+    # retain their original case in the model and on disk.
+    font.setCapitalization(QFont.Capitalization.AllLowercase)
+    return font

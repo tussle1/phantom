@@ -9,8 +9,8 @@ from unittest.mock import patch
 try:
     from PySide6.QtCore import Qt
     from PySide6.QtTest import QTest
-    from PySide6.QtGui import QFontInfo, QFontMetrics
-    from PySide6.QtWidgets import QApplication
+    from PySide6.QtGui import QFont, QFontInfo, QFontMetrics
+    from PySide6.QtWidgets import QApplication, QLabel, QPushButton
     from native.gui import ControlPanel
     QT_AVAILABLE = True
 except (ImportError, OSError):
@@ -44,6 +44,33 @@ class GuiTests(unittest.TestCase):
         metrics = QFontMetrics(font)
         self.assertTrue(all(metrics.inFontUcs4(ord(c)) for c in REQUIRED_TEXT))
         self.assertGreater(metrics.horizontalAdvance('Phantom - Start runtime'), 0)
+
+    def test_horizontal_layout_and_compact_restore(self):
+        self.assertGreater(self.panel.width(), self.panel.height())
+        self.assertGreaterEqual(self.panel.details_scroll.x(), self.panel.overview.width())
+        self.assertGreater(self.panel.details_scroll.width(), 400)
+        for page in ('Visuals', 'Aim', 'Input', 'Configs'):
+            self.panel.select_page(page)
+            self.app.processEvents()
+            self.assertGreater(self.panel.width(), self.panel.height())
+            self.assertTrue(self.panel.details_scroll.isVisible())
+        self.panel.toggle_more();self.app.processEvents()
+        self.assertEqual(self.panel.width(), 440)
+        self.assertFalse(self.panel.details_scroll.isVisible())
+        self.panel.toggle_more();self.app.processEvents()
+        self.assertGreater(self.panel.width(), self.panel.height())
+
+    def test_lowercase_is_presentation_only(self):
+        from native.typography import ui_font
+        self.assertEqual(ui_font(10).capitalization(), QFont.Capitalization.AllLowercase)
+        for page in ('Visuals', 'Aim', 'Input', 'Configs'):
+            self.panel.select_page(page)
+            self.app.processEvents()
+            for widget in self.panel.findChildren(QLabel) + self.panel.findChildren(QPushButton):
+                self.assertEqual(widget.font().capitalization(), QFont.Capitalization.AllLowercase)
+        self.panel.model.save('MixedCase')
+        self.assertEqual(self.panel.model.name, 'MixedCase')
+        self.assertTrue((Path(self.temp.name)/'MixedCase.json').is_file())
 
     def test_menu_toggle_hides_reopens_and_controls_pause_state(self):
         self.assertTrue(self.panel.isVisible())

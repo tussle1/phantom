@@ -216,7 +216,7 @@ class ControlPanel(QWidget):
         self.last_frame = 0
         self.sliders, self.toggles, self.combos, self.tab_buttons = {}, {}, {}, {}
         self.setWindowFlags(Qt.WindowType.Window | Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint)
-        self.setWindowTitle('Phantom — native control panel')
+        self.setWindowTitle('phantom — native control panel')
         self.setFixedWidth(440)
         self.setStyleSheet(STYLE)
         self.setFont(ui_font(10))
@@ -231,6 +231,12 @@ class ControlPanel(QWidget):
         title.addWidget(minimize);title.addWidget(close);self.titlebar.setFixedHeight(36)
         self.titlebar.mousePressEvent = self.drag_start;self.titlebar.mouseMoveEvent = self.drag_move
         outer.addWidget(self.titlebar)
+        self.workspace = QWidget()
+        columns = QHBoxLayout(self.workspace);columns.setContentsMargins(0,0,0,0);columns.setSpacing(0)
+        self.overview = QWidget()
+        overview_layout = QVBoxLayout(self.overview);overview_layout.setContentsMargins(0,0,0,0);overview_layout.setSpacing(0)
+        columns.addWidget(self.overview)
+        outer.addWidget(self.workspace,1)
         body = QWidget();body_layout = QVBoxLayout(body);body_layout.setContentsMargins(10,4,10,0);body_layout.setSpacing(0)
         self.hero = Hero();body_layout.addWidget(self.hero);body_layout.addSpacing(12)
         for spec in SLIDERS:
@@ -250,15 +256,16 @@ class ControlPanel(QWidget):
             self.tab_buttons[label] = button;column.addWidget(button)
             sub = QLabel(subtitles[label]);sub.setAlignment(Qt.AlignmentFlag.AlignCenter);sub.setStyleSheet('color: #77628f; font-size: 10px;');sub.setFixedHeight(33)
             column.addWidget(sub);tabs.addLayout(column)
-        body_layout.addLayout(tabs);outer.addWidget(body)
+        body_layout.addLayout(tabs);overview_layout.addWidget(body);overview_layout.addStretch()
         morebar = QWidget();morebar.setStyleSheet('background: #201a2b;')
         morelayout = QHBoxLayout(morebar);morelayout.setContentsMargins(12,0,12,0)
         morelayout.addSpacing(85);morelayout.addStretch();self.more = QPushButton('Less');self.more.setFixedHeight(23);self.more.clicked.connect(self.toggle_more)
         morelayout.addWidget(self.more);morelayout.addStretch();self.menu_hint = QLabel();self.menu_hint.setStyleSheet('font-size: 9px; color: #b9809d;');morelayout.addWidget(self.menu_hint)
-        outer.addWidget(morebar)
+        overview_layout.addWidget(morebar)
         self.details = QWidget();self.details_layout = QVBoxLayout(self.details);self.details_layout.setContentsMargins(18,13,18,7);self.details_layout.setSpacing(5)
         self.details_scroll = QScrollArea();self.details_scroll.setWidgetResizable(True);self.details_scroll.setWidget(self.details);self.details_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        outer.addWidget(self.details_scroll,1)
+        self.details_scroll.setStyleSheet('QScrollArea { border-left: 1px solid #3a304a; }')
+        columns.addWidget(self.details_scroll,1)
         self.message = QLabel('Changes apply to the running session. Save keeps them on disk.');self.message.setWordWrap(True);self.message.setFixedHeight(39);self.message.setContentsMargins(18,0,18,0);self.message.setStyleSheet('font-size: 11px; color: #9284ac;')
         outer.addWidget(self.message)
         footer = QWidget();footer.setStyleSheet('background: #201a2b;');buttons = QHBoxLayout(footer);buttons.setContentsMargins(10,8,10,10);buttons.setSpacing(6)
@@ -371,10 +378,15 @@ class ControlPanel(QWidget):
     def resize_panel(self):
         self.more.setText('Less' if self.expanded else 'More')
         self.details_scroll.setVisible(self.expanded)
-        wanted = 960 if self.expanded and self.page=='Input' else 905 if self.expanded else 558
-        screen = QApplication.primaryScreen()
-        available = screen.availableGeometry().height()-24 if screen else wanted
-        self.setFixedHeight(min(wanted,max(500,available)))
+        screen = self.screen() or QApplication.primaryScreen()
+        available = screen.availableGeometry() if screen else None
+        width = min(980, available.width()-24) if available else 980
+        # Keep the overview readable and let longer detail pages scroll.
+        # On narrow desktops compact mode still uses the original small panel.
+        self.setFixedWidth(width if self.expanded else 440)
+        self.overview.setFixedWidth(min(440, width//2) if self.expanded else 440)
+        wanted = 600 if self.expanded else 558
+        self.setFixedHeight(min(wanted, available.height()-24) if available else wanted)
 
     def clear_details(self):
         self.cancel_capture()
@@ -563,7 +575,7 @@ def launch(profile,config_dir,config_name='default',screenshots=None):
         def capture():
             try:
                 directory=Path(screenshots);directory.mkdir(parents=True,exist_ok=True)
-                panel.setFixedHeight(905);app.processEvents()
+                panel.resize_panel();app.processEvents()
                 if panel.hero.image.isNull():
                     raise OSError('The bundled banner asset is missing.')
                 if not panel.grab().save(str(directory/'gui-expanded.png')):

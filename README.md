@@ -81,6 +81,14 @@ python phantom.py --gui --profile native/profiles/reference-26598758.json
 QT_QPA_PLATFORM=offscreen python phantom.py --gui --screenshot-dir artifacts/ui --profile native/profiles/reference-26598758.json
 ```
 
+### Layout and typography
+
+The expanded panel uses a horizontal, two-column layout: overview and tabs on the
+left, the selected settings page on the right. Longer pages scroll independently.
+More/Less switches between the wide view and the compact overview. Interface text
+is rendered lowercase in Poppins; stored config names, paths and binding values
+are not rewritten.
+
 ### Font and menu key
 
 The panel bundles **Poppins Regular** (SIL Open Font License 1.1), registered as
