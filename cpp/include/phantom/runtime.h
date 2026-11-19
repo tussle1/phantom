@@ -39,7 +39,13 @@ PHANTOM_API int32_t PHANTOM_CALL phantom_runtime_start_bomb_overlay(const Phanto
 PHANTOM_API int32_t PHANTOM_CALL phantom_runtime_stop_bomb_overlay(void);
 
 /* Experimental local-only skin changer runtime exports.
-   Loading the DLL alone never reads, writes, or modifies weapons. */
+   Loading the DLL alone never reads, writes, or modifies weapons: a host
+   (for example the Skins panel) must call load + apply/start explicitly.
+   When the DLL is not hosted inside the game, apply/restore/watcher target a
+   running cs2.exe through VM read/write process memory (external access, never
+   injection) and fail closed with PHANTOM_NOT_INTEGRATED when no game exists.
+   Successful manual applies force one network full update (delta tick -1) so
+   the written econ fields become visible immediately. */
 PHANTOM_API int32_t PHANTOM_CALL phantom_runtime_load_skin_file(const char* path);
 PHANTOM_API int32_t PHANTOM_CALL phantom_runtime_apply_skins(PhantomSkinApplyReport* out);
 PHANTOM_API int32_t PHANTOM_CALL phantom_runtime_restore_skins(PhantomSkinApplyReport* out);

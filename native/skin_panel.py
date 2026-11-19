@@ -21,7 +21,13 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .skin_bridge import probe_foundation
+from .skin_bridge import (
+    PHANTOM_NOT_INTEGRATED,
+    PHANTOM_OK,
+    SkinFoundationBridge,
+    find_foundation_library,
+    probe_foundation,
+)
 from .skins import (
     DEFAULT_SKIN_ENTRY,
     KNIVES,
@@ -419,6 +425,13 @@ class SkinPanel(QWidget):
         self._secondary_buttons.append(self.export_button)
 
         probe = probe_foundation()
+        self.foundation = None
+        library = find_foundation_library()
+        if library is not None:
+            try:
+                self.foundation = SkinFoundationBridge(library)
+            except (OSError, ValueError, RuntimeError, AttributeError):
+                self.foundation = None
         self.bridge_status = QLabel(probe['summary'])
         self.bridge_status.setWordWrap(True)
         self.bridge_status.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
@@ -427,6 +440,7 @@ class SkinPanel(QWidget):
 
         note = QLabel(
             'Local client-side cosmetics only (20 knives + 34 firearms); never alters Steam inventory or other players’ views. '
+            'Sync exports .skin-loadout.json and, when the C++ foundation is present, applies it to a running CS2 (external VM access, no injection) plus a file watcher. '
             'Knife overrides write definition/subclass/finish fields; live CS2 3D .vmdl swaps also require an in-process Source 2 UpdateSubclass/SetModel hook (unvalidated live).'
         )
         note.setWordWrap(True)
@@ -694,11 +708,36 @@ class SkinPanel(QWidget):
             exported = self.panel.model.export_skins()
             knife_id = self.panel.model.config.knife_override
             knife_part = f', knife {display_weapon_name(knife_id)}' if knife_id else ''
-            self.panel.message.setText(
-                f'Synced local skin loadout to {exported.name} ({len(self.panel.model.config.skins)} weapons{knife_part}).'
+            message = (
+                f'Synced local skin loadout to {exported.name} '
+                f'({len(self.panel.model.config.skins)} weapons{knife_part}).'
             )
+            message += self._attach_to_cs2(exported)
+            self.panel.message.setText(message)
         except (OSError, ValueError) as error:
             self.panel.message.setText(str(error))
+
+    def _attach_to_cs2(self, exported):
+        """Load + apply + watch through the C++ foundation; returns a status suffix."""
+        if self.foundation is None:
+            return ''
+        try:
+            self.foundation.load_skin_file(exported)
+            code, report = self.foundation.apply_skins()
+            if code == PHANTOM_NOT_INTEGRATED:
+                return ' Start CS2, then Sync again to attach.'
+            if code != PHANTOM_OK:
+                return f' Foundation apply failed (code {code}).'
+            watch = ''
+            watch_code = self.foundation.start_watcher(exported)
+            if watch_code == PHANTOM_OK:
+                watch = ' · watcher active'
+            return (
+                f' Applied {report["weapons_applied"]}/{report["weapons_found"]} '
+                f'weapon(s) in CS2{watch}.'
+            )
+        except (OSError, ValueError, RuntimeError) as error:
+            return f' Foundation: {error}'
 
     def refresh_from_model(self):
         skins = self.panel.model.config.skins
