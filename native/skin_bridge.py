@@ -1,8 +1,10 @@
 """Optional ctypes bridge to the compiled C++ phantom-internal-foundation library.
 
-This bridge never injects a DLL or writes to another process. When the foundation
-library is present locally, it validates ABI compatibility, inspects status, and
-syncs local skin loadout preferences through the real C ABI.
+This bridge never injects a DLL, creates threads, or executes code inside
+another process. When the foundation library is present locally it validates
+ABI compatibility, inspects status, syncs local skin loadout preferences, and —
+through the C++ runtime — applies them to a running cs2.exe via external VM
+read/write process memory (fail-closed when no game is reachable).
 """
 from __future__ import annotations
 
@@ -50,6 +52,15 @@ class SkinApplyReport(C.Structure):
         ('weapons_applied', C.c_uint32),
         ('weapons_restored', C.c_uint32),
         ('weapons_failed', C.c_uint32),
+    ]
+
+
+class SkinWatcherOptions(C.Structure):
+    _fields_ = [
+        ('struct_size', C.c_uint32),
+        ('poll_interval_ms', C.c_uint32),  # 50..5000
+        ('restore_on_stop', C.c_uint32),   # 0 or 1
+        ('loadout_json_path', C.c_char * 260),
     ]
 
 
@@ -116,6 +127,8 @@ class SkinFoundationBridge:
         self._load_file = bind('phantom_runtime_load_skin_file', C.c_int32, C.c_char_p)
         self._apply_skins = bind('phantom_runtime_apply_skins', C.c_int32, C.POINTER(SkinApplyReport))
         self._restore_skins = bind('phantom_runtime_restore_skins', C.c_int32, C.POINTER(SkinApplyReport))
+        self._start_watcher = bind('phantom_runtime_start_skin_watcher', C.c_int32, C.POINTER(SkinWatcherOptions))
+        self._stop_watcher = bind('phantom_runtime_stop_skin_watcher', C.c_int32)
 
     def abi_version(self):
         return int(self._abi_version())
@@ -185,6 +198,50 @@ class SkinFoundationBridge:
         if code != PHANTOM_OK:
             raise ValueError(f'C++ foundation rejected skin loadout file (code {code}).')
         return self.list_preferences()
+
+    @staticmethod
+    def _report_dict(report):
+        return {
+            'weapons_found': int(report.weapons_found),
+            'weapons_applied': int(report.weapons_applied),
+            'weapons_restored': int(report.weapons_restored),
+            'weapons_failed': int(report.weapons_failed),
+        }
+
+    def apply_skins(self):
+        """Apply the loaded loadout; returns (status_code, report_dict)."""
+        report = SkinApplyReport()
+        report.struct_size = C.sizeof(SkinApplyReport)
+        code = int(self._apply_skins(C.byref(report)))
+        if code == PHANTOM_INVALID_ARGUMENT:
+            raise RuntimeError('phantom_runtime_apply_skins rejected the report struct.')
+        return code, self._report_dict(report)
+
+    def restore_skins(self):
+        """Restore original finishes; returns (status_code, report_dict)."""
+        report = SkinApplyReport()
+        report.struct_size = C.sizeof(SkinApplyReport)
+        code = int(self._restore_skins(C.byref(report)))
+        if code == PHANTOM_INVALID_ARGUMENT:
+            raise RuntimeError('phantom_runtime_restore_skins rejected the report struct.')
+        return code, self._report_dict(report)
+
+    def start_watcher(self, path, poll_interval_ms=1000, restore_on_stop=False):
+        """Start the C++ loadout watcher (idempotent); returns a status code."""
+        if type(poll_interval_ms) is not int or not 50 <= poll_interval_ms <= 5000:
+            raise ValueError('Watcher poll_interval_ms must be an integer in 50-5000 ms.')
+        encoded = str(Path(path)).encode('utf-8')
+        if len(encoded) >= 260:
+            raise ValueError('Skin loadout path is too long for the C++ watcher (259 bytes max).')
+        options = SkinWatcherOptions()
+        options.struct_size = C.sizeof(SkinWatcherOptions)
+        options.poll_interval_ms = poll_interval_ms
+        options.restore_on_stop = 1 if restore_on_stop else 0
+        options.loadout_json_path = encoded
+        return int(self._start_watcher(C.byref(options)))
+
+    def stop_watcher(self):
+        return int(self._stop_watcher())
 
     def list_preferences(self):
         buffer = (CosmeticPreference * MAX_SKINS)()

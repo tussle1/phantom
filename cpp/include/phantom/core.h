@@ -64,12 +64,19 @@ struct SkinFieldLayout {
     std::uint32_t fallback_wear = 0, fallback_stattrak = 0;
     std::uint32_t viewmodel_attachment = 0, custom_econ_reload_id = 0, mesh_group_mask = 0;
 };
+// engine2.dll locations used by the optional skin runtime to force a network
+// full update (delta tick) after a loadout change so writes become visible.
+struct Engine2Layout {
+    std::uintptr_t network_game_client = 0; // RVA of the global interface pointer.
+    std::uint32_t delta_tick = 0;           // m_nDeltaTick within INetworkGameClient.
+};
 struct Profile {
     ProfileModules modules;
     ProfileFields fields;
     ProfileLayout layout;
     BombFieldLayout bomb;
     SkinFieldLayout skins;
+    Engine2Layout engine2;
     std::string source;
     static Profile reference_26598758();
 };

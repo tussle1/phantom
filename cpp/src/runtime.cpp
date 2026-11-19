@@ -16,6 +16,11 @@
 namespace {
 constexpr std::size_t max_skin_file_bytes = 65536;
 std::atomic<bool> g_skin_loadout_enabled{true};
+// Set on every loadout (re)load and manual apply/restore so the next
+// successful apply forces one network full update (delta tick -1), making the
+// writes visible immediately. The watcher polls through the internal apply
+// path only and never arms it, so polling cannot loop full updates.
+std::atomic<bool> g_skin_force_full_update{false};
 
 void clear_timing(PhantomBombTiming* out) {
     if (!out) return;
@@ -65,6 +70,7 @@ int32_t PHANTOM_CALL phantom_runtime_load_skin_file(const char* path) {
         const int32_t replaced = phantom::replace_cosmetic_preferences(entries, knife_override);
         if (replaced != PHANTOM_OK) return replaced;
         g_skin_loadout_enabled.store(enabled);
+        g_skin_force_full_update.store(true);
         return PHANTOM_OK;
     } catch (...) {
         return PHANTOM_INTERNAL_ERROR;
@@ -79,6 +85,7 @@ int32_t PHANTOM_CALL phantom_runtime_load_skin_file(const char* path) {
 #define NOMINMAX
 #endif
 #include <windows.h>
+#include <tlhelp32.h>
 
 namespace {
 constexpr wchar_t overlay_class[] = L"PhantomBombTimerOverlay";
@@ -96,25 +103,110 @@ public:
 
 class ReadWriteProcessMemory final : public phantom::IProcessMemory {
 public:
+    // Defaults to this process (in-process hosting); the skin runtime retargets
+    // it at a running cs2.exe before every adapter use.
+    void set_process(HANDLE process) { process_ = process ? process : GetCurrentProcess(); }
     bool read(std::uintptr_t address, void* output, std::size_t size) const override {
         if (!address || !output) return false;
         SIZE_T bytes_read = 0;
-        if (!ReadProcessMemory(GetCurrentProcess(), reinterpret_cast<LPCVOID>(address), output, size, &bytes_read))
+        if (!ReadProcessMemory(process_, reinterpret_cast<LPCVOID>(address), output, size, &bytes_read))
             return false;
         return bytes_read == size;
     }
     bool write(std::uintptr_t address, const void* input, std::size_t size) override {
         if (!address || !input) return false;
         SIZE_T bytes_written = 0;
-        if (!WriteProcessMemory(GetCurrentProcess(), reinterpret_cast<LPVOID>(address), input, size, &bytes_written))
+        if (!WriteProcessMemory(process_, reinterpret_cast<LPVOID>(address), input, size, &bytes_written))
             return false;
         return bytes_written == size;
     }
+
+private:
+    HANDLE process_ = GetCurrentProcess();
 };
 
 std::uintptr_t client_base() {
     HMODULE module = GetModuleHandleW(L"client.dll");
     return module ? reinterpret_cast<std::uintptr_t>(module) : 0;
+}
+
+// Skin-runtime process targeting. When the DLL is hosted inside the game the
+// adapter keeps using the current process. Otherwise the runtime opens the
+// running cs2.exe with VM read/write access and resolves client.dll through a
+// module snapshot — external memory access only, never code injection.
+struct SkinTarget {
+    HANDLE process = nullptr;
+    DWORD pid = 0;
+    bool in_process = false;
+    bool owned = false;
+    std::uintptr_t client = 0;
+};
+
+std::uintptr_t module_base_on(const SkinTarget& target, const wchar_t* name) {
+    if (target.in_process) {
+        HMODULE module = GetModuleHandleW(name);
+        return module ? reinterpret_cast<std::uintptr_t>(module) : 0;
+    }
+    HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, target.pid);
+    if (snapshot == INVALID_HANDLE_VALUE) return 0;
+    MODULEENTRY32W entry{};
+    entry.dwSize = sizeof(entry);
+    std::uintptr_t base = 0;
+    if (Module32FirstW(snapshot, &entry)) {
+        do {
+            if (lstrcmpiW(entry.szModule, name) == 0) {
+                base = reinterpret_cast<std::uintptr_t>(entry.modBaseAddr);
+                break;
+            }
+        } while (Module32NextW(snapshot, &entry));
+    }
+    CloseHandle(snapshot);
+    return base;
+}
+
+void release_skin_target(SkinTarget& target) {
+    if (target.owned && target.process) CloseHandle(target.process);
+    target = SkinTarget{};
+}
+
+bool acquire_skin_target(SkinTarget& out) {
+    out = SkinTarget{};
+    HMODULE local = GetModuleHandleW(L"client.dll");
+    if (local) {
+        out.process = GetCurrentProcess();
+        out.in_process = true;
+        out.client = reinterpret_cast<std::uintptr_t>(local);
+        return out.client != 0;
+    }
+    HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (snapshot == INVALID_HANDLE_VALUE) return false;
+    PROCESSENTRY32W entry{};
+    entry.dwSize = sizeof(entry);
+    DWORD pid = 0;
+    if (Process32FirstW(snapshot, &entry)) {
+        do {
+            if (lstrcmpiW(entry.szExeFile, L"cs2.exe") == 0) {
+                pid = entry.th32ProcessID;
+                break;
+            }
+        } while (Process32NextW(snapshot, &entry));
+    }
+    CloseHandle(snapshot);
+    if (!pid) return false;
+    // Read/write/operation plus limited query: exactly what the adapter needs;
+    // no thread, injection, or code-page access is requested.
+    HANDLE process = OpenProcess(PROCESS_VM_READ | PROCESS_VM_WRITE | PROCESS_VM_OPERATION |
+                                 PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (!process) return false;
+    out.process = process;
+    out.pid = pid;
+    out.owned = true;
+    out.client = module_base_on(out, L"client.dll");
+    if (!out.client) {
+        release_skin_target(out);
+        return false;
+    }
+    return true;
 }
 
 std::wstring utf8_to_wide(const char* value) {
@@ -196,13 +288,45 @@ phantom::MemoryCosmeticAdapter* ensure_skin_adapter_locked(std::uintptr_t base) 
     return g_skin_state.adapter.get();
 }
 
+// One-shot network full update: writing -1 to INetworkGameClient::m_nDeltaTick
+// makes CS2 rebuild entity snapshots so externally written econ fields become
+// visible immediately. The client resets the tick after the update, and the
+// watcher only rewrites values (it never re-arms this), so the update cannot
+// loop. Rebuilding weapon entities resets client-side econ overrides, which is
+// why the watcher re-applies the loadout on its next poll.
+void force_network_full_update(const SkinTarget& target) {
+    const phantom::Profile profile = phantom::Profile::reference_26598758();
+    const std::uintptr_t engine2 = module_base_on(target, L"engine2.dll");
+    if (!engine2) return;
+    std::uintptr_t network_game_client = 0;
+    SIZE_T bytes_read = 0;
+    if (!ReadProcessMemory(target.process,
+                           reinterpret_cast<LPCVOID>(engine2 + profile.engine2.network_game_client),
+                           &network_game_client, sizeof(network_game_client), &bytes_read) ||
+        bytes_read != sizeof(network_game_client) || !network_game_client) {
+        return;
+    }
+    const std::int32_t delta_tick = -1;
+    SIZE_T bytes_written = 0;
+    WriteProcessMemory(target.process,
+                       reinterpret_cast<LPVOID>(network_game_client + profile.engine2.delta_tick),
+                       &delta_tick, sizeof(delta_tick), &bytes_written);
+}
+
+struct SkinTargetGuard {
+    SkinTarget& target;
+    ~SkinTargetGuard() { release_skin_target(target); }
+};
+
 int32_t apply_skins_win(PhantomSkinApplyReport* out) {
     clear_skin_report(out);
-    const std::uintptr_t base = client_base();
-    if (!base) return PHANTOM_NOT_INTEGRATED;
     try {
         std::lock_guard<std::mutex> lock(g_skin_state.engine_mutex);
-        auto* adapter = ensure_skin_adapter_locked(base);
+        SkinTarget target;
+        SkinTargetGuard guard{target};
+        if (!acquire_skin_target(target)) return PHANTOM_NOT_INTEGRATED;
+        g_skin_state.memory.set_process(target.process);
+        auto* adapter = ensure_skin_adapter_locked(target.client);
         if (!adapter) return PHANTOM_NOT_INTEGRATED;
         phantom::CosmeticRunReport run{};
         int32_t status = PHANTOM_OK;
@@ -218,6 +342,10 @@ int32_t apply_skins_win(PhantomSkinApplyReport* out) {
         out->weapons_applied = run.weapons_applied;
         out->weapons_restored = run.weapons_restored;
         out->weapons_failed = run.weapons_failed;
+        // Keep the pending flag when the target is unreachable so the force
+        // happens on the first apply after the game appears.
+        if (status == PHANTOM_OK && g_skin_force_full_update.exchange(false))
+            force_network_full_update(target);
         return status;
     } catch (...) {
         clear_skin_report(out);
@@ -227,11 +355,13 @@ int32_t apply_skins_win(PhantomSkinApplyReport* out) {
 
 int32_t restore_skins_win(PhantomSkinApplyReport* out) {
     clear_skin_report(out);
-    const std::uintptr_t base = client_base();
-    if (!base) return PHANTOM_NOT_INTEGRATED;
     try {
         std::lock_guard<std::mutex> lock(g_skin_state.engine_mutex);
-        auto* adapter = ensure_skin_adapter_locked(base);
+        SkinTarget target;
+        SkinTargetGuard guard{target};
+        if (!acquire_skin_target(target)) return PHANTOM_NOT_INTEGRATED;
+        g_skin_state.memory.set_process(target.process);
+        auto* adapter = ensure_skin_adapter_locked(target.client);
         if (!adapter) return PHANTOM_NOT_INTEGRATED;
         phantom::CosmeticRunReport run{};
         const int32_t status = g_skin_state.controller.restore_all(*adapter, run);
@@ -239,6 +369,10 @@ int32_t restore_skins_win(PhantomSkinApplyReport* out) {
         out->weapons_applied = run.weapons_applied;
         out->weapons_restored = run.weapons_restored;
         out->weapons_failed = run.weapons_failed;
+        // A manual restore is a user action: consume any pending force and
+        // always refresh once so the original finishes come back on screen.
+        g_skin_force_full_update.store(false);
+        if (status == PHANTOM_OK) force_network_full_update(target);
         return status;
     } catch (...) {
         clear_skin_report(out);
@@ -460,15 +594,22 @@ int32_t PHANTOM_CALL phantom_runtime_stop_bomb_overlay(void) {
 
 int32_t PHANTOM_CALL phantom_runtime_apply_skins(PhantomSkinApplyReport* out) {
     if (!out || out->struct_size != sizeof(*out)) return PHANTOM_INVALID_ARGUMENT;
+    // Manual apply requests one forced network full update alongside the write.
+    g_skin_force_full_update.store(true);
     return apply_skins_win(out);
 }
 int32_t PHANTOM_CALL phantom_runtime_restore_skins(PhantomSkinApplyReport* out) {
     if (!out || out->struct_size != sizeof(*out)) return PHANTOM_INVALID_ARGUMENT;
+    g_skin_force_full_update.store(true);
     return restore_skins_win(out);
 }
 int32_t PHANTOM_CALL phantom_runtime_start_skin_watcher(const PhantomSkinWatcherOptions* options) {
     if (!valid_watcher_options(options)) return PHANTOM_INVALID_ARGUMENT;
-    if (!client_base()) return PHANTOM_NOT_INTEGRATED;
+    {
+        SkinTarget probe;
+        if (!acquire_skin_target(probe)) return PHANTOM_NOT_INTEGRATED;
+        release_skin_target(probe);
+    }
     std::lock_guard<std::mutex> lock(g_skin_state.watcher_mutex);
     if (g_skin_state.thread) return PHANTOM_OK;
     HANDLE stop_event = CreateEventW(nullptr, TRUE, FALSE, nullptr);

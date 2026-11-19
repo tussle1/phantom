@@ -14,7 +14,12 @@ import phantom
 from native.config import Config, load_config, save_config, validate_config
 from native.gui_model import SettingsModel
 from native.presets import PRESETS, preset_config
-from native.skin_bridge import SkinFoundationBridge, probe_foundation
+from native.skin_bridge import (
+    PHANTOM_NOT_INTEGRATED,
+    PHANTOM_OK,
+    SkinFoundationBridge,
+    probe_foundation,
+)
 from native.skins import (
     DEFAULT_SKIN_ENTRY,
     KNIFE_DEFINITIONS,
@@ -115,6 +120,16 @@ class SkinCatalogTests(unittest.TestCase):
             with self.subTest(pack=name):
                 validated = validate_skins(loadout)
                 self.assertEqual(len(validated), len(loadout))
+
+        # The full weapon + knife combo fills the 32-slot cap and equips a knife.
+        combo = STARTER_LOADOUTS['full combo']
+        self.assertEqual(len(combo), MAX_SKINS)
+        self.assertEqual([k for k in combo if is_custom_knife(int(k))], ['507'])
+        for key, entry in combo.items():
+            self.assertIsNotNone(
+                kit_by_id(entry['paint_kit'], int(key)),
+                f'combo finish {entry["paint_kit"]} does not resolve for weapon {key}',
+            )
 
 
 class SkinValidationAndConfigTests(unittest.TestCase):
@@ -308,6 +323,20 @@ class SkinCppBridgeIntegrationTests(unittest.TestCase):
             probed = probe_foundation((directory,))
             self.assertTrue(probed['found'])
             self.assertIn('ABI v1', probed['summary'])
+
+            # Runtime apply/restore/watcher exports are bound and fail closed
+            # without a reachable game process (never a crash or silent write).
+            code, report = bridge.apply_skins()
+            self.assertEqual(code, PHANTOM_NOT_INTEGRATED)
+            self.assertEqual(report['weapons_found'], 0)
+            code, report = bridge.restore_skins()
+            self.assertEqual(code, PHANTOM_NOT_INTEGRATED)
+            self.assertEqual(bridge.start_watcher(exported), PHANTOM_NOT_INTEGRATED)
+            self.assertEqual(bridge.stop_watcher(), PHANTOM_OK)
+            with self.assertRaises(ValueError):
+                bridge.start_watcher(exported, poll_interval_ms=10)
+            with self.assertRaises(ValueError):
+                bridge.start_watcher('x' * 300)
 
 
 if __name__ == '__main__':

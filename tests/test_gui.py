@@ -354,6 +354,59 @@ class GuiTests(unittest.TestCase):
         self.assertIsNone(self.panel.skin_panel)
         self.panel.refresh()
 
+    def test_skin_sync_attaches_through_foundation(self):
+        from native.skin_bridge import PHANTOM_NOT_INTEGRATED, PHANTOM_OK
+        self.panel.select_page('Skins')
+        self.app.processEvents()
+        sp = self.panel.skin_panel
+        self.assertIsNotNone(sp)
+
+        calls = {}
+
+        class FakeFoundation:
+            def load_skin_file(self, path):
+                calls['load'] = str(path)
+
+            def apply_skins(self):
+                calls['apply'] = True
+                return PHANTOM_OK, {
+                    'weapons_found': 3, 'weapons_applied': 3,
+                    'weapons_restored': 0, 'weapons_failed': 0,
+                }
+
+            def start_watcher(self, path, poll_interval_ms=1000, restore_on_stop=False):
+                calls['watch'] = str(path)
+                return PHANTOM_OK
+
+        sp.foundation = FakeFoundation()
+        QTest.mouseClick(sp.export_button, Qt.MouseButton.LeftButton)
+        self.assertIn('load', calls)
+        self.assertIn('apply', calls)
+        self.assertIn('watch', calls)
+        message = self.panel.message.text()
+        self.assertIn('Applied 3/3', message)
+        self.assertIn('watcher active', message)
+        self.assertTrue(Path(calls['load']).is_file())
+
+        # No reachable game: the file still exports and the message says how to attach.
+        class NoGameFoundation:
+            def load_skin_file(self, path):
+                pass
+
+            def apply_skins(self):
+                return PHANTOM_NOT_INTEGRATED, {
+                    'weapons_found': 0, 'weapons_applied': 0,
+                    'weapons_restored': 0, 'weapons_failed': 0,
+                }
+
+            def start_watcher(self, path, poll_interval_ms=1000, restore_on_stop=False):
+                return PHANTOM_NOT_INTEGRATED
+
+        sp.foundation = NoGameFoundation()
+        QTest.mouseClick(sp.export_button, Qt.MouseButton.LeftButton)
+        self.assertIn('Start CS2', self.panel.message.text())
+        sp.foundation = None
+
     def test_local_knife_changer_tab_workflow(self):
         import json
         from native.skins import loadout_path

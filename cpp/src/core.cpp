@@ -55,6 +55,7 @@ Profile Profile::reference_26598758() {
              0x18a8, 0x18ac,
              0x18b0, 0x18b4,
              0x18d8, 0x1b64, 0x208},
+            {0x9afb30, 0x24c},
             "cb01076744f3554324d76b7a4830f0fcdfde95fb"};
 }
 
